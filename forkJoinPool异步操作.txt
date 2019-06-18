@@ -1,0 +1,44 @@
+    @Override
+    public boolean addTodoItem(TodoItemBO todoItemBO, boolean resendable, boolean omitNotify) {
+
+        todoItemBO.validateFields();
+
+        List<String> memberIds = todoItemBO.getMemberIds();
+        AtomicInteger addCount = new AtomicInteger();
+        List<ToDoItemDO> addedToDos = new ArrayList<>();
+
+        ForkJoinTask<?> forkJoinTask = forkJoinPool.submit(() -> memberIds.parallelStream().forEach(memberId -> {
+            if (StringUtils.isBlank(memberId)) {
+                return;
+            }
+            //添加类型异常不能影响整体逻辑
+            try {
+                todoTypeService.addTypeForUserIfNotExists(memberId, todoItemBO.getTypeName());
+            } catch (Exception e) {
+                log.error("Exception when add types", e);
+            }
+            ToDoItemDO todoItem = todoItemBO.build(memberId);
+            if (!resendable && itemMapper
+                    .exists(todoItem.getQzId(), todoItem.getAppId(), todoItem.getBusinessKey(),
+                            todoItem.getMemId())) {
+                return;
+            }
+            int added = itemMapper.save(todoItem);
+            if (added > 0) {
+                addedToDos.add(todoItem);
+                addCount.addAndGet(added);
+                incrementUserUnReadCount(memberId);
+            }
+        }));
+
+        try {
+            forkJoinTask.get();
+        } catch (InterruptedException | ExecutionException e) {
+            Thread.currentThread().interrupt();
+            log.error("Exception when wait async task return", e);
+        }
+
+        sendNotify(addedToDos, omitNotify);
+
+        return addCount.get() > 0;
+    }
