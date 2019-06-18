@@ -1,0 +1,40 @@
+package com.yonyoucloud.ec.sns.support;
+
+import java.util.concurrent.Callable;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinTask;
+import java.util.concurrent.ForkJoinWorkerThread;
+
+/**
+ * 专用的线程池,防止影响其他业务
+ *
+ * @author liuhaoi
+ */
+public class CommonUpesnForkJoinPool {
+
+    protected ForkJoinPool pool;
+
+    public CommonUpesnForkJoinPool(int parallelism, String threadPrefix) {
+
+        final ForkJoinPool.ForkJoinWorkerThreadFactory factory = po -> {
+            final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(po);
+            worker.setName(threadPrefix + worker.getPoolIndex());
+            return worker;
+        };
+
+        pool = new ForkJoinPool(parallelism, factory, null, false);
+    }
+
+    public ForkJoinTask<?> submit(Runnable task) {
+        return pool.submit(task);
+    }
+
+    public <T> ForkJoinTask<T> submit(Callable<T> task) {
+        return pool.submit(task);
+    }
+
+    public <T> ForkJoinTask<T> submit(ForkJoinTask<T> task) {
+        return pool.submit(task);
+    }
+
+}
