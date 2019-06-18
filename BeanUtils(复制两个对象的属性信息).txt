@@ -1,0 +1,133 @@
+package com.yonyoucloud.ec.sns.starter.core.support.beans;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.FatalBeanException;
+import org.springframework.util.Assert;
+import org.springframework.util.ClassUtils;
+
+import java.beans.BeanInfo;
+import java.beans.Introspector;
+import java.beans.PropertyDescriptor;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * @author liuhaoi
+ */
+@Slf4j
+public class BeanUtils {
+
+
+    public static Map<String, Object> introspect(Object obj) throws Exception {
+        Map<String, Object> result = new HashMap<>();
+        BeanInfo info = Introspector.getBeanInfo(obj.getClass());
+        for (PropertyDescriptor pd : info.getPropertyDescriptors()) {
+            Method reader = pd.getReadMethod();
+            if (reader != null) {
+                result.put(pd.getName(), reader.invoke(obj));
+            }
+        }
+        result.remove("class");
+        return result;
+    }
+
+
+    public static Map<String, String> introspectAsStringFields(Object obj) throws Exception {
+        Map<String, String> result = new HashMap<>();
+        BeanInfo info = Introspector.getBeanInfo(obj.getClass());
+        for (PropertyDescriptor pd : info.getPropertyDescriptors()) {
+            Method reader = pd.getReadMethod();
+            if (reader != null) {
+                Object invoke = reader.invoke(obj);
+
+                if (invoke == null) {
+                    continue;
+                }
+
+                if (invoke instanceof String) {
+                    result.put(pd.getName(), (String) invoke);
+                } else {
+                    result.put(pd.getName(), invoke.toString());
+                }
+            }
+        }
+        result.remove("class");
+        return result;
+    }
+
+
+    public static void copyPropertiesIgnoresNull(Object source, Object target, String... ignoreProperties)
+            throws BeansException {
+
+        Assert.notNull(source, "Source must not be null");
+        Assert.notNull(target, "Target must not be null");
+
+        Class<?> actualEditable = target.getClass();
+
+        PropertyDescriptor[] targetPds = getPropertyDescriptors(actualEditable);
+        List<String> ignoreList = (ignoreProperties != null ? Arrays.asList(ignoreProperties) : null);
+
+        for (PropertyDescriptor targetPd : targetPds) {
+            Method writeMethod = targetPd.getWriteMethod();
+            if (writeMethod != null && (ignoreList == null || !ignoreList.contains(targetPd.getName()))) {
+                PropertyDescriptor sourcePd = getPropertyDescriptor(source.getClass(), targetPd.getName());
+                if (sourcePd != null) {
+                    Method readMethod = sourcePd.getReadMethod();
+                    if (readMethod != null &&
+                            ClassUtils.isAssignable(writeMethod.getParameterTypes()[0], readMethod.getReturnType())) {
+                        try {
+                            if (!Modifier.isPublic(readMethod.getDeclaringClass().getModifiers())) {
+                                readMethod.setAccessible(true);
+                            }
+                            Object value = readMethod.invoke(source);
+
+                            if (value != null) {
+
+                                if (!Modifier.isPublic(writeMethod.getDeclaringClass().getModifiers())) {
+                                    writeMethod.setAccessible(true);
+                                }
+                                writeMethod.invoke(target, value);
+                            }
+                        } catch (Throwable ex) {
+                            throw new FatalBeanException(
+                                    "Could not copy property '" + targetPd.getName() + "' from source to target", ex);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Retrieve the JavaBeans {@code PropertyDescriptors} for the given property.
+     *
+     * @param clazz        the Class to retrieve the PropertyDescriptor for
+     * @param propertyName the name of the property
+     * @return the corresponding PropertyDescriptor, or {@code null} if none
+     * @throws BeansException if PropertyDescriptor lookup fails
+     */
+    private static PropertyDescriptor getPropertyDescriptor(Class<?> clazz, String propertyName)
+            throws BeansException {
+
+        CachedIntrospectionResults cr = CachedIntrospectionResults.forClass(clazz);
+        return cr.getPropertyDescriptor(propertyName);
+    }
+
+    /**
+     * Retrieve the JavaBeans {@code PropertyDescriptor}s of a given class.
+     *
+     * @param clazz the Class to retrieve the PropertyDescriptors for
+     * @return an array of {@code PropertyDescriptors} for the given class
+     * @throws BeansException if PropertyDescriptor look fails
+     */
+    private static PropertyDescriptor[] getPropertyDescriptors(Class<?> clazz) throws BeansException {
+        CachedIntrospectionResults cr = CachedIntrospectionResults.forClass(clazz);
+        return cr.getPropertyDescriptors();
+    }
+
+}
