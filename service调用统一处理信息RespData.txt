@@ -1,0 +1,19 @@
+import lombok.Data;
+
+@Data
+public class RespData<T> {
+
+    private Integer flag;
+    private String msg;
+    private T result;
+
+    public RespData(boolean isSuccess, String message, T result) {
+        if(isSuccess){
+            flag = 0;
+        }else{
+            flag = 1;
+        }
+        this.msg = message;
+        this.result = result;
+    }
+}
