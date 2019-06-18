@@ -1,0 +1,60 @@
+package com.yonyoucloud.ec.sns.starter.authentication.web.impl.authentication;
+
+import com.yonyoucloud.ec.sns.starter.authentication.AuthenticationProperties;
+import com.yonyoucloud.ec.sns.starter.authentication.web.Authentication;
+import com.yonyoucloud.ec.sns.starter.authentication.web.AuthenticationRequired;
+import com.yonyoucloud.ec.sns.starter.authentication.web.AuthenticationType;
+import com.yonyoucloud.ec.sns.starter.authentication.web.pojo.AuthenticationResult;
+import com.yonyoucloud.ec.sns.starter.core.support.RequestUtil;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.method.HandlerMethod;
+
+import javax.servlet.http.HttpServletRequest;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * @author liuhaoi
+ */
+@Slf4j
+@RequiredArgsConstructor
+public class IPWhiteListAuthentication implements Authentication {
+
+    private final AuthenticationProperties properties;
+
+    @Override
+    public AuthenticationResult authenticate(HttpServletRequest request, HandlerMethod method,
+                                             AuthenticationRequired annotation) {
+
+        String ipAddress = RequestUtil.getClientIpAddress(request);
+
+        List<Pattern> ipWhiteListRegexPattern = properties.getIpWhiteListRegexPattern();
+
+        if (log.isDebugEnabled()) {
+            log.debug("request ip {} with ip regex patterns {}", ipAddress, ipWhiteListRegexPattern);
+        }
+
+        if (ipWhiteListRegexPattern != null) {
+            for (Pattern pattern : ipWhiteListRegexPattern) {
+                Matcher matcher = pattern.matcher(ipAddress);
+
+                if (matcher.find()) {
+                    return AuthenticationResult.builder().succeed(true).build();
+                }
+            }
+        }
+
+        log.warn("IP white list authentication failed for ip {} and ip regex patterns {}", ipAddress, ipWhiteListRegexPattern);
+
+        return AuthenticationResult.builder().succeed(false).build();
+    }
+
+    @Override
+    public AuthenticationType supportedType() {
+        return AuthenticationType.IP_WHITE_LIST;
+    }
+
+
+}
