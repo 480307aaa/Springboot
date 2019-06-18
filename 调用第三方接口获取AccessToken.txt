@@ -1,0 +1,37 @@
+ private String getJDAccessToken() {
+        String accessToken = jedisTemplate.get(CacheKey.CACHE_TOKEN_KEY);
+        if (StringHelper.isEmpty(accessToken)) {
+            JDAccessTokenDTO jdAccessTokenDTO;
+            try {
+                jdAccessTokenDTO = JDAPIUtils.getAccessToken();
+                jedisTemplate.setnxex(CacheKey.CACHE_TOKEN_KEY, jdAccessTokenDTO.getAccess_token(), jdAccessTokenDTO.getExpires_in());
+            } catch (Exception e) {
+                log.error(e.getMessage(), e);
+            }
+        }
+        return accessToken;
+ }
+ 
+ public static JDAccessTokenDTO getAccessToken() throws Exception {
+        long start = System.currentTimeMillis();
+        JDAccessTokenDTO jdAccessTokenDTO = null;
+        String timeStamp = DateUtil.curDateStr();
+        HashMap<String, String> params = new HashMap<>();
+        params.put("grant_type", JDConstant.GRANT_TYPE);
+        params.put("client_id", JDConstant.CLIENT_ID);
+        params.put("client_secret", JDConstant.CLIENT_SECRET);
+        params.put("timestamp", timeStamp);
+        params.put("username", JDConstant.USER_NAME);
+        params.put("password", StringUtils.md5(JDConstant.PASSWD));
+        params.put("sign", signToken(timeStamp));
+        String str = HttpClientUtils.sendPost(JDConstant.ACCESS_TOKEN_URL, null, params);
+        JDResponseDTO jdResponseDTO = JSON.parseObject(str, JDResponseDTO.class);
+        if (jdResponseDTO.getResultCode().equals(JDConstant.REQUEST_SUCCESS_CODE)
+                && StringHelper.isNotEmpty(jdResponseDTO.getResult())) {
+            jdAccessTokenDTO = JSON.parseObject(jdResponseDTO.getResult(), JDAccessTokenDTO.class);
+            System.out.println(jdAccessTokenDTO.getAccess_token());
+        }
+        long end = System.currentTimeMillis();
+        System.out.print("jd api (getAccessToken) cost: " + (end - start) / 1000);
+        return jdAccessTokenDTO;
+    }
