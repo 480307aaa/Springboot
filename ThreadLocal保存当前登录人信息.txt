@@ -1,0 +1,101 @@
+package com.yonyou.ws.base.interceptor;
+
+import com.yonyou.ws.cdm.dto.CompanyDTO;
+import com.yonyou.ws.cdm.dto.MemberDTO;
+import com.yonyou.ws.common.exception.BusinessException;
+import com.yonyou.ws.common.exception.ErrorType;
+import com.yonyou.ws.common.model.FromAppType;
+
+/**
+ * Created by qicen on 2017/3/27.
+ */
+public class ThreadInfoHolder {
+
+    private static final ThreadLocal<ThreadInfo> threadLocal = new ThreadLocal<>();
+
+    /**
+     * 获取当前登录人员信息
+     *
+     * @return
+     */
+    public static Long getCurrentMemberId() {
+        ThreadInfo threadInfo = threadLocal.get();
+        Long memberId = null;
+        if (threadInfo != null && threadInfo.member != null) {
+            memberId = threadInfo.member.getId();
+        }
+        if (memberId == null) {
+            throw new BusinessException(ErrorType.USER_UNLOGIN_ERROR);
+        }
+        return memberId;
+    }
+
+    /**
+     * 获取当前用户信息
+     * @return
+     */
+    public static MemberDTO getCurrentMember() {
+        ThreadInfo threadInfo = threadLocal.get();
+        MemberDTO member = null;
+        if (threadInfo != null) {
+            member = threadInfo.member;
+        }
+        if (member == null) {
+            throw new BusinessException(ErrorType.USER_UNLOGIN_ERROR);
+        }
+        return member;
+    }
+
+    public static void setCurrentMember(MemberDTO member) {
+
+        ThreadInfo threadInfo = threadLocal.get();
+        if (threadInfo == null) {
+            threadInfo = new ThreadInfo();
+            threadLocal.set(threadInfo);
+        }
+        if (member == null) {
+            throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "不存在此人员");
+        }
+        threadInfo.member = member;
+    }
+
+    public static FromAppType getFromAppType() {
+        ThreadInfo threadInfo = threadLocal.get();
+        return threadInfo.fromAppType;
+    }
+
+    public static void setFromAppType(String appName) {
+        FromAppType fromAppType = FromAppType.parse(appName);
+        ThreadInfo threadInfo = threadLocal.get();
+        if (threadInfo == null) {
+            threadInfo = new ThreadInfo();
+            threadLocal.set(threadInfo);
+        }
+        threadInfo.fromAppType = fromAppType;
+    }
+
+    public static void clear() {
+        ThreadInfo threadInfo = threadLocal.get();
+        if (threadInfo != null) {
+            threadInfo.clear();
+        }
+    }
+
+    private static class ThreadInfo {
+
+        // 人员信息
+        private MemberDTO member;
+
+        // 请求来源APP
+        private FromAppType fromAppType;
+
+        // 当前所属公司ID
+        private CompanyDTO company;
+
+        public void clear() {
+            this.member = null;
+            this.fromAppType = null;
+            this.company = null;
+        }
+    }
+}
