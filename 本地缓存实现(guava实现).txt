@@ -1,0 +1,122 @@
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 本地缓存，String key的实现
+ *
+ * @author liuhaoi
+ */
+public class LocalStringKeyCache<V> extends LocalCache<String, V> {
+
+    public LocalStringKeyCache() {
+        super();
+    }
+
+    public LocalStringKeyCache(int initCapacity, int maximumSize, int time, TimeUnit timeunit) {
+        super(initCapacity, maximumSize, time, timeunit);
+    }
+
+    public LocalStringKeyCache(int initCapacity, int maximumSize, int time, TimeUnit timeunit, boolean softValues,
+                               int concurrencyLevel) {
+        super(initCapacity, maximumSize, time, timeunit, softValues, concurrencyLevel);
+    }
+
+
+    public V get(String... key) {
+        return get(buildKey(key));
+    }
+
+    public void put(V value, String... key) {
+        put(buildKey(key), value);
+    }
+
+    private String buildKey(String... key) {
+        return String.join("::", key);
+    }
+
+}
+
+
+
+
+
+
+package com.yonyoucloud.ec.sns.data.cache.local;
+
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 使用Guava实现的本地缓存
+ *
+ * @param <K> key
+ * @param <V> value
+ * @author liuhaoi
+ */
+public class LocalCache<K, V> {
+
+    private Cache<K, V> build;
+
+    public LocalCache() {
+        this(1000, 100000, 2, TimeUnit.HOURS, false, 4);
+    }
+
+    public LocalCache(int initCapacity, int maximumSize, int time, TimeUnit timeunit) {
+        this(initCapacity, maximumSize, time, timeunit, false, 4);
+    }
+
+    /**
+     * @param initCapacity 初始大小
+     * @param maximumSize  最大大小
+     * @param time         过期时间
+     * @param timeunit     时间单位
+     * @param softValues   是否使用软引用存储值
+     */
+    public LocalCache(int initCapacity, int maximumSize, int time, TimeUnit timeunit, boolean softValues,
+                      int concurrencyLevel) {
+        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder()
+                .initialCapacity(initCapacity)
+                .maximumSize(maximumSize)
+                .concurrencyLevel(concurrencyLevel)
+                .expireAfterWrite(time, timeunit);
+
+        if (softValues) {
+            cacheBuilder.softValues();
+        }
+
+        build = cacheBuilder.build();
+        LocalCacheManager.CACHES.add(this);
+    }
+
+    /**
+     * 根据key获取缓存值
+     *
+     * @param key key
+     * @return null if not exists or expired
+     */
+    public V get(K key) {
+        return build.getIfPresent(key);
+    }
+
+    /**
+     * 放入缓存
+     *
+     * @param key   key
+     * @param value value
+     */
+    public void put(K key, V value) {
+        build.put(key, value);
+    }
+
+    public void clean() {
+        build.cleanUp();
+    }
+
+    public void remove(K key) {
+        build.invalidate(key);
+    }
+
+
+}
+
