@@ -1,0 +1,55 @@
+package com.yonyoucloud.ec.sns.starter.todo.center.support;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yonyoucloud.ec.sns.starter.todo.center.TodoCenterProperties;
+import lombok.Getter;
+import org.apache.http.client.HttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.boot.web.client.RestTemplateCustomizer;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.web.client.RestTemplate;
+
+import java.time.Duration;
+
+/**
+ * TodoCenter使用的REST Template, 不和其他应用混淆, 不被其他配置影响, 如SpringMVC
+ * 使用Jackson作为序列化和反序列化(比httpClient更优雅的方式)
+ */
+@Getter
+public class TodoCenterRestTemplate {
+
+    private RestTemplate restTemplate;
+
+    public TodoCenterRestTemplate(TodoCenterProperties todoCenterProperties, ObjectMapper objectMapper) {
+        this.restTemplate = new RestTemplateBuilder()
+                .setConnectTimeout(Duration.ofMillis(todoCenterProperties.getConnectTimeoutMs()))
+                .setReadTimeout(Duration.ofMillis(todoCenterProperties.getReadTimeoutMs()))
+                .messageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
+                .customizers((RestTemplateCustomizer) restTemplate -> {
+                    HttpClientBuilder httpClientBuilder = HttpClientBuilder.create();
+
+                    //创建连接管理器
+                    PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
+                    connectionManager.setMaxTotal(2000);
+                    connectionManager.setDefaultMaxPerRoute(3);
+
+                    httpClientBuilder.setConnectionManager(connectionManager);
+
+                    HttpClient httpClient = httpClientBuilder.build();
+
+                    //创建HttpComponentsClientHttpRequestFactory
+                    HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(
+                            httpClient);
+                    requestFactory.setConnectTimeout(1000);
+                    requestFactory.setReadTimeout(60 * 1000);
+                    requestFactory.setConnectionRequestTimeout(500);
+
+                    restTemplate.setRequestFactory(requestFactory);
+                }).build();
+
+    }
+
+}
