@@ -1,0 +1,288 @@
+String str = HttpClientUtils.sendPost(JDConstant.CREATE_ORDER_URL, null, params);请求url
+
+
+
+
+
+package com.yonyou.ws.common.utils;
+
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.TypeReference;
+import com.yonyou.ws.common.exception.BusinessException;
+import com.yonyou.ws.common.exception.ErrorType;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.http.Header;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.config.CookieSpecs;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.*;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
+import org.apache.http.entity.mime.FormBodyPart;
+import org.apache.http.entity.mime.FormBodyPartBuilder;
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.StringBody;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.protocol.HTTP;
+import org.apache.http.util.EntityUtils;
+import org.elasticsearch.rest.RestRequest;
+import org.springframework.http.HttpStatus;
+
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Created by qicen on 2017/3/9.
+ */
+@Slf4j
+public class HttpClientUtils {
+
+    private static final int DEFAULT_MAX_TOTAL_CONNECTIONS = 50;
+    private static final int DEFAULT_MAX_CONNECTIONS_PER_ROUTE = 20;
+    private static PoolingHttpClientConnectionManager connManager;
+
+    /**
+     * 初始化
+     */
+    static {
+        // 连接池管理器
+        connManager = new PoolingHttpClientConnectionManager();
+        // 连接池最大连接数
+        connManager.setMaxTotal(DEFAULT_MAX_TOTAL_CONNECTIONS);
+        // 每个路由最大连接数
+        connManager.setDefaultMaxPerRoute(DEFAULT_MAX_CONNECTIONS_PER_ROUTE);
+    }
+
+    /**
+     * Get请求
+     *
+     * @param url 请求地址
+     * @return 响应结果
+     */
+    public static JSONObject doGet(String url) {
+        String result = execute(url, HttpGet.METHOD_NAME, null, null, StandardCharsets.UTF_8, false);
+        return JSONObject.parseObject(result);
+    }
+
+    /**
+     * Get请求
+     *
+     * @param url 请求地址
+     * @return 响应结果
+     */
+    public static JSONObject doGet(String url, Map<String, String> params) {
+        String result = execute(url, HttpGet.METHOD_NAME, null, params, StandardCharsets.UTF_8, false);
+        return JSONObject.parseObject(result);
+    }
+
+    /**
+     * Get请求
+     *
+     * @param url           请求地址
+     * @param typeReference 响应结果泛型
+     * @return 响应结果
+     */
+    public static <T> T doGet(String url, TypeReference<T> typeReference) {
+        String result = execute(url, HttpGet.METHOD_NAME, null, null, StandardCharsets.UTF_8, false);
+        return JSONObject.parseObject(result, typeReference);
+    }
+
+    /**
+     * Post请求
+     *
+     * @param url           请求地址
+     * @param params        请求参数
+     * @param isRequestBody 是否是json请求体
+     * @return 响应结果
+     */
+    public static JSONObject doPost(String url, Map<String, String> params, boolean isRequestBody) {
+        String result = execute(url, HttpPost.METHOD_NAME, null, params, StandardCharsets.UTF_8, isRequestBody);
+        return JSONObject.parseObject(result);
+    }
+
+    /**
+     * Post请求
+     *
+     * @param url           请求地址
+     * @param params        请求参数
+     * @param isRequestBody 是否是json请求体
+     * @param typeReference 响应结果泛型
+     * @return 响应结果
+     */
+    public static <T> T doPost(String url, Map<String, String> params, boolean isRequestBody, TypeReference<T> typeReference) {
+        String result = execute(url, HttpPost.METHOD_NAME, null, params, StandardCharsets.UTF_8, isRequestBody);
+        return JSONObject.parseObject(result, typeReference);
+    }
+
+    public static String sendAppJsonPost(String reqURL, Header[] headers, String requestBody) {
+        try {
+            String responseContent = null;
+
+            HttpPost httpPost = new HttpPost(reqURL);
+            httpPost.setHeader(HTTP.CONTENT_TYPE, "application/json; charset=UTF-8");
+            if (headers != null && headers.length > 0) {
+                httpPost.setHeaders(headers);
+            }
+            if (StringHelper.isNotEmpty(requestBody)) {
+                httpPost.setEntity(new StringEntity(requestBody, ContentType.APPLICATION_JSON));
+            }
+            HttpResponse response = getHttpClient().execute(httpPost);
+            return getResult(responseContent, response);
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            throw new BusinessException(ErrorType.SYS_HTTP_ERROR);
+        }
+    }
+
+    public static String sendAppJsonPut(String reqURL, Header[] headers, String requestBody) {
+        try {
+            String responseContent = null;
+
+            HttpPut httpPost = new HttpPut(reqURL);
+            httpPost.setHeader(HTTP.CONTENT_TYPE, "application/json; charset=UTF-8");
+            if (headers != null && headers.length > 0) {
+                httpPost.setHeaders(headers);
+            }
+            if (StringHelper.isNotEmpty(requestBody)) {
+                httpPost.setEntity(new StringEntity(requestBody, ContentType.APPLICATION_JSON));
+            }
+            HttpResponse response = getHttpClient().execute(httpPost);
+            return getResult(responseContent, response);
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            throw new BusinessException(ErrorType.SYS_HTTP_ERROR);
+        }
+    }
+
+    private static String getResult(String responseContent, HttpResponse response) throws IOException {
+        int statusCode = response.getStatusLine().getStatusCode();
+        if (statusCode == HttpStatus.OK.value()) {
+            HttpEntity entity = response.getEntity();
+            if (null != entity) {
+                responseContent = EntityUtils.toString(entity, "UTF-8");
+                EntityUtils.consume(entity);
+            }
+            return responseContent;
+        } else {
+            log.error("statusCode:" + statusCode);
+            throw new BusinessException(ErrorType.SYS_BUSI_ERROR);
+        }
+    }
+
+    /**
+     * Post请求（Multipart方式）
+     *
+     * @param url           请求地址
+     * @param params        请求参数
+     * @param typeReference 响应结果泛型
+     * @return 响应结果
+     */
+    public static <T> T doPostMultipart(String url, Map<String, String> params, TypeReference<T> typeReference) {
+        HttpPost httppost = new HttpPost(url);
+        MultipartEntityBuilder builder = MultipartEntityBuilder.create();
+        //关键, 否则中文文件乱码
+        builder.setMode(HttpMultipartMode.RFC6532);
+        builder.setCharset(StandardCharsets.UTF_8);
+        for (Map.Entry<String, String> paramEntry : params.entrySet()) {
+            StringBody body = new StringBody(paramEntry.getValue(), ContentType.TEXT_PLAIN.withCharset(StandardCharsets.UTF_8));
+            FormBodyPart part = FormBodyPartBuilder.create(paramEntry.getKey(), body).build();
+            builder.addPart(part);
+        }
+        httppost.setEntity(builder.build());
+        String jsonStr = executeInternal(httppost);
+        return JSONObject.parseObject(jsonStr, typeReference);
+    }
+
+    /**
+     * 发送post请求
+     *
+     * @param reqURL
+     * @param params
+     * @return
+     */
+    public static String sendPost(String reqURL, Header[] headers, HashMap<String, String> params) throws Exception {
+
+        String responseContent = null;
+        // 构建http请求
+        RequestBuilder requestBuilder = RequestBuilder.create(RestRequest.Method.POST.name()).setUri(reqURL).setCharset(Charset.forName("UTF-8"));
+        // 设置请求参数
+        if (params != null && !params.isEmpty()) {
+            for (Map.Entry<String, String> param : params.entrySet()) {
+                requestBuilder.addParameter(param.getKey(), param.getValue());
+            }
+        }
+        // 设置请求头
+        if (headers != null && headers.length > 0) {
+            for (Header header : headers) {
+                requestBuilder.addHeader(header);
+            }
+        }
+
+        HttpResponse response = getHttpClient().execute(requestBuilder.build());
+        return getResult(responseContent, response);
+    }
+
+
+    private static String execute(String uri, String method, Map<String, String> headers, Map<String, String> params,
+                                  Charset charSet, boolean isRequestBody) {
+        // 构建http请求
+        RequestBuilder requestBuilder = RequestBuilder.create(method).setUri(uri).setCharset(charSet);
+        if (isRequestBody) {
+            StringEntity stringEntity = new StringEntity(JSON.toJSONString(params), ContentType.APPLICATION_JSON);
+            requestBuilder.setEntity(stringEntity);
+        } else {
+            // 设置请求参数
+            if (params != null && !params.isEmpty()) {
+                for (Map.Entry<String, String> param : params.entrySet()) {
+                    requestBuilder.addParameter(param.getKey(), param.getValue());
+                }
+            }
+        }
+        // 设置请求头
+        if (headers != null && !headers.isEmpty()) {
+            for (Map.Entry<String, String> header : headers.entrySet()) {
+                requestBuilder.addHeader(header.getKey(), header.getValue());
+            }
+        }
+        // 执行http请求
+        return executeInternal(requestBuilder.build());
+    }
+
+    private static String executeInternal(HttpUriRequest request) {
+        // 执行请求
+        try (CloseableHttpResponse response = getHttpClient().execute(request)) {
+
+            int statusCode = response.getStatusLine().getStatusCode();
+            if (statusCode == HttpStatus.OK.value()) {
+                HttpEntity entity = response.getEntity();
+                return EntityUtils.toString(entity, "utf-8");
+            } else {
+                HttpEntity entity = response.getEntity();
+                String responseString = EntityUtils.toString(entity, "utf-8");
+                log.error("请求返回异常，状态码：" + statusCode + ", 响应结果：" + responseString + ", request url: " + request.getURI());
+                throw new BusinessException(ErrorType.SYS_HTTP_RESPONSE_ERROR, statusCode);
+            }
+        } catch (ClientProtocolException e) {
+            throw new BusinessException(ErrorType.SYS_HTTP_RESPONSE_ERROR, e, "client: " + e.getMessage());
+        } catch (IOException e) {
+            throw new BusinessException(ErrorType.SYS_HTTP_RESPONSE_ERROR, e, "io: " + e.getMessage());
+        }
+    }
+
+    private static CloseableHttpClient getHttpClient() {
+        // http请求配置信息
+        RequestConfig requestConfig = RequestConfig.custom().setConnectTimeout(5000).setSocketTimeout(5000)
+                .setConnectionRequestTimeout(5000).setCookieSpec(CookieSpecs.STANDARD).build();
+        return HttpClients.custom().setConnectionManager(connManager).setDefaultRequestConfig(requestConfig)
+                .setConnectionManagerShared(true).build();
+    }
+}
