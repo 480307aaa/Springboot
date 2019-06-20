@@ -1,0 +1,253 @@
+package com.yonyoucloud.ec.sns.starter.authentication.web.interceptor;
+
+import com.yonyoucloud.ec.sns.error.ECAuthenticationFailedException;
+import com.yonyoucloud.ec.sns.error.ECConfigurationException;
+import com.yonyoucloud.ec.sns.error.ECUnauthorizedException;
+import com.yonyoucloud.ec.sns.starter.authentication.AuthenticationProperties;
+import com.yonyoucloud.ec.sns.starter.authentication.web.Authentication;
+import com.yonyoucloud.ec.sns.starter.authentication.web.AuthenticationRequired;
+import com.yonyoucloud.ec.sns.starter.authentication.web.AuthenticationType;
+import com.yonyoucloud.ec.sns.starter.authentication.web.impl.AuthThreadLocalInAPIVariables;
+import com.yonyoucloud.ec.sns.starter.authentication.web.pojo.AuthenticationResult;
+import com.yonyoucloud.ec.sns.starter.authentication.web.pojo.ThreadLocalVariable;
+import com.yonyoucloud.ec.sns.starter.core.module.EnvironmentService;
+import com.yonyoucloud.ec.sns.starter.core.support.mvc.mdc.MdcInterceptor;
+import com.yonyoucloud.ec.sns.starter.inapi.module.pojo.InAPIUser;
+import com.yonyoucloud.ec.sns.starter.token.data.Role;
+import com.yonyoucloud.ec.sns.starter.token.domain.AccessTokenBO;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.MDC;
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.http.HttpMethod;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/**
+ * @author liuhaoi
+ */
+@RequiredArgsConstructor
+@Slf4j
+public class AuthenticationRequiredInterceptor extends HandlerInterceptorAdapter implements ApplicationContextAware {
+
+
+    private final AuthThreadLocalInAPIVariables threadLocalInAPIVariables;
+
+    private final AuthenticationProperties authenticationProperties;
+
+    private final EnvironmentService environmentService;
+
+    private ApplicationContext applicationContext;
+
+    private Map<AuthenticationType, Authentication> authenticationMap;
+
+    private Map<AuthenticationType, Authentication> getAllAuthenticationType() {
+
+        if (authenticationMap != null) {
+            return authenticationMap;
+        }
+
+        authenticationMap = applicationContext.getBeansOfType(Authentication.class).values()
+                .stream()
+                .collect(Collectors.toMap(Authentication::supportedType, Function.identity()));
+
+        return authenticationMap;
+    }
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+
+
+        if (!(handler instanceof HandlerMethod)) {
+            return processOptionsRequest(request, handler);
+        }
+
+        HandlerMethod handlerMethod = (HandlerMethod) handler;
+
+        AuthenticationRequired annotation = handlerMethod.getMethodAnnotation(AuthenticationRequired.class);
+
+        Class<?> beanType = handlerMethod.getBeanType();
+
+        // 优先获取方法的注解,方法上没有则获取类上的
+        if (annotation == null) {
+            annotation = beanType.getAnnotation(AuthenticationRequired.class);
+        }
+
+        //如果没有发现注解,则打印错误,因为配置了该过滤器,但是有类没有配置注解,属于疏漏
+        if (annotation == null) {
+
+            boolean samePackage = isSamePackage(beanType);
+            //同一包的进行错误提示,不同包的忽略
+            if (samePackage) {
+                log.warn("No Authentication channel found for class {}, developer must config one before deploy.",
+                        beanType);
+            }
+            return true;
+        }
+
+        AuthenticationType[] authenticationTypes = annotation.value();
+
+        Map<AuthenticationType, Authentication> allAuthenticationType = getAllAuthenticationType();
+
+        ThreadLocalVariable<AccessTokenBO, InAPIUser> variable = new ThreadLocalVariable<>();
+        variable.setProcessed(true);
+
+        //配置多个验证方式, 则按照配置顺序一一验证
+        for (AuthenticationType type : authenticationTypes) {
+
+            Authentication authentication = allAuthenticationType.get(type);
+
+            if (authentication == null) {
+                throw new ECConfigurationException("No Implementation of Authentication type " + type + " found");
+            }
+
+            AuthenticationResult result;
+
+            try {
+                result = authentication.authenticate(request, handlerMethod, annotation);
+            } catch (ECUnauthorizedException e) {
+                if (log.isDebugEnabled()) {
+                    log.debug("authenticate failed with type {} for uri {}", type, request.getRequestURI());
+                }
+                continue;
+            } catch (Exception e) {
+                log.warn("Exception when authenticate with type " + type + " and uri " + request.getRequestURI(), e);
+                continue;
+            }
+
+            if (result.isSucceed()) {
+                variable.setType(type);
+                processSuccess(result, variable);
+
+                //校验权限
+                verifyRole(variable.getToken(), annotation);
+
+                return true;
+            }
+        }
+
+        threadLocalInAPIVariables.setVariable(variable);
+
+        if (authenticationProperties.isIgnoreAuthOnTestEnv() && environmentService.isDevOrTestEnv()) {
+            log.warn(
+                    "Auth failed is ignored in test or dev environment. Be carefully when you get this message in production env. url: {}",
+                    request.getRequestURI());
+            return true;
+        }
+
+        //所有验证方式都没有通过
+        throw new ECAuthenticationFailedException(
+                "authentication failed for uri " + request.getRequestURI() + " with types " + Arrays
+                        .toString(authenticationTypes));
+
+    }
+
+    private boolean processOptionsRequest(HttpServletRequest request, Object handler) {
+        // 忽略OPTIONS请求
+        if (HttpMethod.OPTIONS.name().equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+
+        //静态资源忽略安全认证
+        if (handler instanceof org.springframework.web.servlet.resource.ResourceHttpRequestHandler) {
+            return true;
+        }
+
+        log.warn("Unexpected handler type {} in pre handler of interceptor for uri {} {}", handler.getClass(),
+                request.getMethod(), request.getRequestURI());
+        return false;
+    }
+
+    private void processSuccess(AuthenticationResult result,
+                                ThreadLocalVariable<AccessTokenBO, InAPIUser> variable) {
+        AccessTokenBO token = result.getToken();
+        if (token != null) {
+            variable.setToken(token);
+        }
+
+        InAPIUser user = result.getUser();
+        if (user != null) {
+            variable.setUser(user);
+            MDC.put(MdcInterceptor.USER_ID_NAME, user.getMemberId());
+        }
+
+        String qzId = result.getQzId();
+        if (StringUtils.isNotBlank(qzId)) {
+            variable.setQzId(qzId);
+            MDC.put(MdcInterceptor.TENANT_ID_NAME, qzId);
+        }
+
+        String userId = result.getUserId();
+        if (StringUtils.isNotBlank(userId)) {
+            variable.setUserId(userId);
+            MDC.put(MdcInterceptor.USER_ID_NAME, userId);
+        }
+
+        threadLocalInAPIVariables.setVariable(variable);
+    }
+
+    private void verifyRole(AccessTokenBO token, AuthenticationRequired annotation) {
+
+        Role requiredRole = annotation.minRole();
+
+        if (requiredRole == Role.COMMON) {
+            return;
+        }
+
+        if (token == null) {
+            return;
+        }
+
+        Role tokenRole = token.getRole();
+
+        if (tokenRole == null || requiredRole.ordinal() < tokenRole.ordinal()) {
+            throw new ECUnauthorizedException(
+                    "min role " + requiredRole + " required, but " + tokenRole + " actually.");
+        }
+
+
+    }
+
+    private boolean isSamePackage(Class<?> beanType) {
+        String name = this.getClass().getPackage().getName();
+
+        String[] split = name.split("\\.");
+
+        String targetName = beanType.getPackage().getName();
+        String[] targetNameSplit = targetName.split("\\.");
+
+        int min = Math.min(Math.min(split.length, targetName.length()), 3);
+
+        boolean samePackage = true;
+
+        for (int i = 0; i < min; i++) {
+            if (!split[i].equals(targetNameSplit[i])) {
+                samePackage = false;
+            }
+        }
+
+        return samePackage;
+    }
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler,
+                                Exception ex) {
+        threadLocalInAPIVariables.cleanup();
+
+    }
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        this.applicationContext = applicationContext;
+    }
+}
