@@ -1,0 +1,76 @@
+Spring Boot项目中自定义注解的使用
+项目中常常要打印日志，尤其是在做接口开发中，因为要面临着对前台数据的检查，在这种情况下，如果还是只使用普通的日志方式，如果配置为INFO 那么明显打印的东西是在太多了，在无奈的压迫下，小编我最终还是选择自己使用Aop的方式去记录日志信息，以下是实战演练。
+本文为作者原创，转载请注明出处
+.定义注解接口
+/**
+ * @Package: com.example.config
+ * @Description: 定制一个接口
+*/
+@Documented
+@Retention(RUNTIME)
+@Target(METHOD)
+public @interface MyLog {
+    String value() default "日志注解";
+}
+•	@Target(ElementType.TYPE)   //接口、类、枚举、注解
+•	@Target(ElementType.FIELD) //字段、枚举的常量
+•	@Target(ElementType.METHOD) //方法
+•	@Target(ElementType.PARAMETER) //方法参数
+•	@Target(ElementType.CONSTRUCTOR)  //构造函数
+•	@Target(ElementType.LOCAL_VARIABLE)//局部变量
+•	@Target(ElementType.ANNOTATION_TYPE)//注解
+•	@Target(ElementType.PACKAGE) ///包   
+•	.RetentionPolicy.SOURCE —— 这种类型的Annotations只在源代码级别保留,编译时就会被忽略
+•	.RetentionPolicy.CLASS —— 这种类型的Annotations编译时被保留,在class文件中存在,但JVM将会忽略
+•	.RetentionPolicy.RUNTIME —— 这种类型的Annotations将被JVM保留,所以他们能在运行时被JVM或其他使用反射机制的代码所读取和使用.
+.通过切面来实现注解
+/**
+ * @Package: com.example.config
+ * @Description: MyLog的实现类
+*/
+@Component
+@Aspect
+public class LogAspect {
+    @Pointcut("@annotation(com.example.config.MyLog)")
+    private void cut() { }
+
+    /**
+     * 定制一个环绕通知
+     * @param joinPoint
+     */
+    @Around("cut()")
+    public void advice(ProceedingJoinPoint joinPoint){
+        System.out.println("环绕通知之开始");
+        try {
+            joinPoint.proceed();
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+        System.out.println("环绕通知之结束");
+    }
+
+    @Before("cut()")
+    public void before() {
+        this.printLog("已经记录下操作日志@Before 方法执行前");
+    }
+
+    @After("recordLog()")
+    public void after() {
+        this.printLog("已经记录下操作日志@After 方法执行后");
+    }
+}
+
+.演示
+@RestController
+public class JsonRest {
+    @MyLog
+    @RequestMapping("/log")
+    public String getLog(){
+        return "<h>Hello World</h>";
+    }
+}
+
+当访问的时候会打印出：[因为小编只用了环绕通知]
+  环绕通知之开始
+  环绕通知之结束
+
