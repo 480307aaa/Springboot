@@ -1,0 +1,60 @@
+预警事件：
+
+package com.yonyoucloud.ec.sns.alarm.starter.common.event;
+
+import com.yonyoucloud.ec.sns.alarm.starter.common.FormattedMessageBuilder;
+import lombok.Data;
+import org.apache.commons.lang3.StringUtils;
+
+
+@Data
+public class NotifyEvent {
+
+    private String applicationName;
+
+    private String content;
+
+    private FormattedMessageBuilder builder;
+
+    public NotifyEvent(FormattedMessageBuilder builder) {
+        this.builder = builder;
+    }
+
+    public NotifyEvent(String content) {
+        this.content = content;
+    }
+
+    public String getContent() {
+        if (StringUtils.isBlank(content) && builder != null) {
+            content = builder.buildMessage();
+        }
+        return content;
+    }
+
+}
+
+达到一定的日志级别就发预警：
+
+
+    private void log(Level level, String message) {
+
+        switch (level) {
+            case WARN:
+                log.warn(message);
+                break;
+            case ERROR:
+                //测试环境容易超时,为了不淹没微信预警,这里测试环境不向微信发送
+                log.warn(message);
+                //非开发环境发送预警
+                if (!environment.acceptsProfiles(Profiles.of("develop", "local", "dev", "daily"))) {
+                    notifyEventDispatcher.dispatchEventAsync(new NotifyEvent(message));
+                }
+                break;
+            case INFO:
+                log.info(message);
+                break;
+            case DEBUG:
+            default:
+                log.debug(message);
+        }
+    }
