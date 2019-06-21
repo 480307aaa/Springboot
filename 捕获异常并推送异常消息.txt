@@ -1,0 +1,73 @@
+package com.yonyou.ws.base.interceptor;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.yonyou.ws.base.api.MessageService;
+import com.yonyou.ws.base.response.CommonResponse;
+import com.yonyou.ws.base.response.ResponseBuilder;
+import com.yonyou.ws.common.exception.BusinessException;
+import com.yonyou.ws.common.exception.ProcessException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseBody;
+
+import javax.servlet.http.HttpServletRequest;
+import java.util.concurrent.*;
+
+@ControllerAdvice
+@Slf4j
+public class ControllerExceptionHanler {
+
+    @Autowired
+    private MessageService messageService;
+
+    ThreadFactory namedThreadFactory = new ThreadFactoryBuilder().setNameFormat("exception-pool-%d").build();
+    ExecutorService executorService = new ThreadPoolExecutor(2, 20,
+            0L, TimeUnit.MILLISECONDS,
+            new LinkedBlockingQueue<>(1024), namedThreadFactory, new ThreadPoolExecutor.AbortPolicy());
+
+
+    @ExceptionHandler(value = Exception.class)
+    @ResponseBody
+    public CommonResponse handleException(final Exception exception, final HttpServletRequest request) {
+        final Class<? extends Exception> exceptionClass = exception.getClass();
+        boolean needNotifyMessage;
+        if (exceptionClass.getSimpleName().contains("ClientAbortException")) {
+            needNotifyMessage = false;
+        } else if (exception instanceof BusinessException
+                && !((BusinessException) exception).getErrorType().isNotifyMessage()) {
+            needNotifyMessage = false;
+        } else if (exception instanceof ProcessException) {
+            needNotifyMessage = false;
+        } else if ((exception instanceof DuplicateKeyException) && (exception.getStackTrace()[0].getClassName().contains("CompanyMemberServiceImpl"))) {
+            needNotifyMessage = false;
+        } else {
+            needNotifyMessage = true;
+        }
+        if (needNotifyMessage) {
+            executorService.submit(() -> pushMsg(request, exception));
+        }
+        return ResponseBuilder.buildFailResponse(exception);
+    }
+
+    /**
+     * 消息推送
+     *
+     * @param request
+     * @param exception
+     */
+    private void pushMsg(HttpServletRequest request, Exception exception) {
+        String message = "";
+        if (request != null) {
+            String requestURI = request.getRequestURI();
+            message = message + "请求地址：" + requestURI;
+        }
+        try {
+            messageService.pushNotifyDevelopMessage(exception, message);
+        } catch (Exception e) {
+            log.error("推送报警消息失败：", e);
+        }
+    }
+}
