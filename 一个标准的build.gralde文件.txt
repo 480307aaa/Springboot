@@ -1,0 +1,130 @@
+apply from: 'config.gradle'
+
+buildscript {
+    apply from: 'config.gradle'
+    repositories {
+        maven { url "${nexusPublicUrl}" }
+        mavenCentral()
+        maven { url 'https://plugins.gradle.org/m2' }
+        maven { url 'https://repo.spring.io/plugins-release' }
+    }
+    dependencies {
+        classpath "org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}"
+        classpath "org.sonarsource.scanner.gradle:sonarqube-gradle-plugin:2.6.1"
+    }
+}
+
+apply from: 'gradle/sonarqube.gradle'
+
+configure(allprojects) { project ->
+    group = 'com.yonyoucloud.ec.sns'
+    apply plugin: 'java'
+
+    def commitIdCommand = 'git rev-parse --short HEAD'
+    def commitId = commitIdCommand.execute().text.trim()
+    version "2.0.0-${commitId}-SNAPSHOT"
+
+    compileJava {
+        sourceCompatibility = 1.8
+        targetCompatibility = 1.8
+        options.encoding = 'UTF-8'
+    }
+
+    compileTestJava {
+        sourceCompatibility = 1.8
+        targetCompatibility = 1.8
+        options.encoding = 'UTF-8'
+        options.compilerArgs += '-parameters'
+    }
+
+}
+apply plugin: 'war'
+apply plugin: 'io.spring.dependency-management'
+apply plugin: 'org.springframework.boot'
+
+repositories {
+    mavenLocal()
+    maven { url "${nexusPublicUrl}" }
+    mavenCentral()
+    maven { url 'https://repo.spring.io/plugins-release' }
+    maven { url 'https://plugins.gradle.org/m2' }
+}
+
+bootRun {
+    sourceResources sourceSets.main
+}
+
+springBoot {
+    mainClassName = 'com.yonyoucloud.ec.sns.todo.server.TodoCenterApplicationStater'
+    buildInfo {
+        properties {
+            version = "${project.version}"
+        }
+    }
+}
+
+bootWar {
+    enabled = true
+    archiveName = "${baseName}.${extension}"
+}
+
+configurations {
+    compile.exclude module: 'spring-boot-starter-tomcat'
+    compile.exclude module: 'spring-boot-starter-jdbc'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+    applyMavenExclusions = false
+}
+
+dependencies {
+
+    compile 'org.springframework.batch:spring-batch-core:2.2.7.RELEASE'
+
+    compile "org.springframework.cloud:spring-cloud-starter-config"
+    compile 'de.codecentric:spring-boot-admin-starter-client:2.1.3'
+
+    compileOnly 'org.projectlombok:lombok:1.18.6'
+    annotationProcessor 'org.projectlombok:lombok:1.18.6'
+
+    compile "com.yonyoucloud.ec:spring-boot-starter-distributed-lock:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-upesn-file-oss:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-upesn-inapi:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-upesn-im:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-upesn-alarm:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-upesn-token-redis:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-upesn-authentication:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-upesn-i18n:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-upesn-i18n-template:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-db-read-write-splitting:${upesnStartersVersion}"
+    compile "com.yonyoucloud.ec:spring-boot-starter-upesn-rate-limiter:${upesnStartersVersion}"
+
+    compile 'org.owasp.esapi:esapi:2.1.0.1'
+
+    compile 'org.springframework.boot:spring-boot-starter'
+    compile 'org.springframework.boot:spring-boot-starter-web'
+    compile 'org.springframework.boot:spring-boot-starter-undertow'
+    compile 'org.springframework.boot:spring-boot-starter-actuator'
+    compile 'org.springframework.boot:spring-boot-starter-aop'
+    compile 'org.springframework.boot:spring-boot-starter-security'
+    compileOnly "org.springframework.boot:spring-boot-configuration-processor"
+
+    compile 'mysql:mysql-connector-java:5.1.47'
+    compile 'org.mybatis.spring.boot:mybatis-spring-boot-starter:1.3.2'
+    testCompile 'org.mybatis.spring.boot:mybatis-spring-boot-starter-test:1.3.2'
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+
+    compile 'io.springfox:springfox-swagger2:2.9.2'
+    compile 'io.springfox:springfox-data-rest:2.9.2'
+    compile 'io.springfox:springfox-bean-validators:2.9.2'
+    compile 'com.github.xiaoymin:swagger-bootstrap-ui:1.9.0'
+}
+
+compileJava.dependsOn(processResources)
+
+jar.into('static') {
+    from('src/main/webapp')
+}
