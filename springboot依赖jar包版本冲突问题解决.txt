@@ -10,4 +10,4 @@ zipStorePath=wrapper/dists
 distributionUrl=https\://services.gradle.org/distributions/gradle-5.4.1-all.zip
 
 
-注意xxx-all.zip,而不是xxx-bean.zip
+注意xxx-all.zip,而不是xxx-bin.zip
