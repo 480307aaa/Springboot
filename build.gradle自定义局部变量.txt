@@ -1,0 +1,3 @@
+def upesnStartersVersion = '2.6.12-SNAPSHOT'
+
+compile 'com.yonyoucloud.ec:spring-boot-starter-upesn-todo-center:' + upesnStartersVersion
