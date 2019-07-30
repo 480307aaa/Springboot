@@ -1,0 +1,35 @@
+package com.yonyoucloud.ec.sns.starter.wechat.module.impl;
+
+import cn.binarywang.wx.miniapp.bean.WxMaJscode2SessionResult;
+import cn.binarywang.wx.miniapp.bean.WxMaPhoneNumberInfo;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+
+
+
+@RunWith(SpringJUnit4ClassRunner.class)
+@SpringBootTest
+public class WeChatAuthServiceImplTest {
+
+    @Autowired
+    private WeChatAuthServiceImpl weChatAuthService;
+
+    @Test
+    public void getOpenIdAndUnionIdByCode() {
+
+        WxMaJscode2SessionResult openIdAndUnionIdByCode = weChatAuthService.getOpenIdAndUnionIdByCode("0213FTLk2Od5rD0v6QMk2Z9DLk23FTLx");
+
+        System.out.println(openIdAndUnionIdByCode);
+    }
+
+    @Test
+    public void decryptData() {
+
+        WxMaPhoneNumberInfo jsonObject = weChatAuthService.decryptData("cbtSpAhjiv705qiZ18BpZQ==", "loOhpNMET/1cR9Wa2lWrZJDkQrl8JdgHkjYjqvibhGar9hfR9hUhus+UAqqvLouhwxQF5sN7GbctioVoWzWC9xT9R4M8NxGBTX4KOfMVD+ecVjSld2S6cfe+oGxzyHJFnn81C5szauoYy5VfunfGyFHv6ReC0Q3Qq0l4ghJBCEOHwZNpujQvF8qW3NguYs8i6V6so97f1aNV3Z2FBxLKMQ==",
+                "Igq700ERyIoWWEvKRzbwDg==");
+        System.out.println(jsonObject);
+    }
+}
