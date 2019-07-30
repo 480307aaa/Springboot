@@ -1,0 +1,3 @@
+compile('com.yonyoucloud.ec:spring-boot-starter-upesn-core:' + upesnStartersVersion) {
+        exclude module: 'spring-boot-starter-upesn-inapi'
+    }
