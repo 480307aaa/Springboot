@@ -1,35 +1,110 @@
-package com.yonyoucloud.ec.sns.starter.wechat.module.impl;
+package com.yonyoucloud.ec.starter.cooperation.sdk.module.impl;
 
-import cn.binarywang.wx.miniapp.bean.WxMaJscode2SessionResult;
-import cn.binarywang.wx.miniapp.bean.WxMaPhoneNumberInfo;
+import com.alibaba.fastjson.JSON;
+import com.yonyoucloud.ec.starter.cooperation.sdk.CooperationTestApplication;
+import com.yonyoucloud.ec.starter.cooperation.sdk.CooperationTestConstants;
+import com.yonyoucloud.ec.starter.cooperation.sdk.module.pojo.CooperationFileInfo;
+import org.apache.commons.io.IOUtils;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
 
 
 @RunWith(SpringJUnit4ClassRunner.class)
-@SpringBootTest
-public class WeChatAuthServiceImplTest {
+@SpringBootTest(classes = CooperationTestApplication.class)
+public class CooperationFileServiceImplTest {
 
     @Autowired
-    private WeChatAuthServiceImpl weChatAuthService;
+    private CooperationFileServiceImpl fileService;
 
     @Test
-    public void getOpenIdAndUnionIdByCode() {
+    public void queryDownloadUrl() {
 
-        WxMaJscode2SessionResult openIdAndUnionIdByCode = weChatAuthService.getOpenIdAndUnionIdByCode("0213FTLk2Od5rD0v6QMk2Z9DLk23FTLx");
+        String url = fileService.queryDownloadUrl(CooperationTestConstants.FILE_ID);
+        Assert.assertNotNull(url);
+        Assert.assertTrue(url.startsWith("http"));
 
-        System.out.println(openIdAndUnionIdByCode);
     }
 
     @Test
-    public void decryptData() {
+    public void queryFileInfo() {
+        CooperationFileInfo info = fileService.queryFileInfo(CooperationTestConstants.FILE_ID);
 
-        WxMaPhoneNumberInfo jsonObject = weChatAuthService.decryptData("cbtSpAhjiv705qiZ18BpZQ==", "loOhpNMET/1cR9Wa2lWrZJDkQrl8JdgHkjYjqvibhGar9hfR9hUhus+UAqqvLouhwxQF5sN7GbctioVoWzWC9xT9R4M8NxGBTX4KOfMVD+ecVjSld2S6cfe+oGxzyHJFnn81C5szauoYy5VfunfGyFHv6ReC0Q3Qq0l4ghJBCEOHwZNpujQvF8qW3NguYs8i6V6so97f1aNV3Z2FBxLKMQ==",
-                "Igq700ERyIoWWEvKRzbwDg==");
-        System.out.println(jsonObject);
+        Assert.assertNotNull(info);
+        Assert.assertNotNull(info.getDownloadUrl());
+        Assert.assertNotNull(info.getFileExtension());
+        Assert.assertNotNull(info.getFileName());
+        Assert.assertNotNull(info.getFileSize());
+        Assert.assertNotNull(info.getFileId());
+    }
+
+    @Test
+    public void queryFileList() {
+        List<CooperationFileInfo> cooperationFileInfos = fileService
+                .queryFileList("3", "1123123", 1, 20);
+
+        Assert.assertNotNull(cooperationFileInfos);
+        Assert.assertTrue(cooperationFileInfos.size() <= 20);
+
+    }
+
+    @Test
+    public void uploadFile() throws IOException {
+
+        Resource resource = new ClassPathResource("application.yml");
+
+        CooperationFileInfo result = fileService.uploadFile("TEST", UUID.randomUUID().toString(), resource.getFile());
+
+        System.out.println(JSON.toJSONString(result, true));
+
+    }
+
+    @Test
+    public void uploadFile1() throws IOException {
+
+        Resource resource = new ClassPathResource("application.yml");
+
+        CooperationFileInfo result = fileService
+                .uploadFile("TEST", UUID.randomUUID().toString(), resource.getInputStream(), resource.getFilename());
+
+        System.out.println(JSON.toJSONString(result, true));
+
+    }
+
+    @Test
+    public void uploadFile2() throws IOException {
+
+        Resource resource = new ClassPathResource("application.yml");
+
+        CooperationFileInfo result = fileService
+                .uploadFile("TEST", UUID.randomUUID().toString(), IOUtils.toByteArray(resource.getInputStream()),
+                        resource.getFilename());
+
+        System.out.println(JSON.toJSONString(result, true));
+
+    }
+
+    @Test
+    public void deleteFile() throws IOException {
+
+        Resource resource = new ClassPathResource("application.yml");
+
+        CooperationFileInfo result = fileService
+                .uploadFile("TEST", UUID.randomUUID().toString(), IOUtils.toByteArray(resource.getInputStream()),
+                        resource.getFilename());
+
+        System.out.println(JSON.toJSONString(result, true));
+
+        fileService.deleteFile(result.getFileId());
+
     }
 }
