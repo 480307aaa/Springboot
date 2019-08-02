@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <property name="LOG_PATH" value="${LOG_PATH:-${LOG_TEMP:-${java.io.tmpdir:-/tmp}}/}"/>
+    <property name="LOG_FILE" value="${LOG_PATH}/spring.log"/>
+    <property name="CONSOLE_LOG_PATTERN" value="-%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd HH:mm:ss.SSS}} ${LOG_LEVEL_PATTERN:-%5p} [%t][%X{x-request-id}:%X{x-tenant-id}:%X{x-user-id}] %40.40logger{39}:%-4line- %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"/>
+    <property name="FILE_LOG_PATTERN" value="-%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd HH:mm:ss.SSS}} ${LOG_LEVEL_PATTERN:-%5p} [%t][%X{x-request-id}:%X{x-tenant-id}:%X{x-user-id}] %40.40logger{39}:%-4line- %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"/>
+
+    <springProfile name="develop,daily,test,dev,local">
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    </springProfile>
+
+    <springProfile name="!local">
+
+        <appender name="APPENDER-FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <encoder>
+                <pattern>${FILE_LOG_PATTERN}</pattern>
+            </encoder>
+            <file>${LOG_FILE}</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/rolling/spring-%d{yyyy-MM-dd}.log.%i</fileNamePattern>
+                <maxFileSize>10MB</maxFileSize>
+                <maxHistory>199</maxHistory>
+                <totalSizeCap>4GB</totalSizeCap>
+            </rollingPolicy>
+        </appender>
+
+        <appender name="APPENDER-ERROR" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <encoder>
+                <pattern>${FILE_LOG_PATTERN}</pattern>
+            </encoder>
+            <file>${LOG_PATH}/error.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/rolling/error.log.%i</fileNamePattern>
+            </rollingPolicy>
+            <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+                <MaxFileSize>10MB</MaxFileSize>
+            </triggeringPolicy>
+            <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+                <level>ERROR</level>
+            </filter>
+        </appender>
+
+    </springProfile>
+
+    <root level="INFO">
+        <springProfile name="!local">
+            <appender-ref ref="APPENDER-FILE"/>
+            <appender-ref ref="APPENDER-ERROR"/>
+        </springProfile>
+        <springProfile name="develop,daily,dev,test,local">
+            <appender-ref ref="CONSOLE"/>
+        </springProfile>
+    </root>
+
+</configuration>
