@@ -1,0 +1,12 @@
+    @ApiOperation(value = "下载文件", notes = "下载文件")
+    @ApiImplicitParams({
+            @ApiImplicitParam(name = "fileId", value = "文件ID", dataType = "string", paramType = "path"),
+    })
+    @GetMapping("/{fileId}/ocstream")
+    public ModelAndView downloadCooperationSuiteFile(@PathVariable("fileId") String fileId) throws IOException {
+
+        String signatureUrl = cooperationFileService.getCooperationFileDownloadUrl(fileId, null, null);
+
+        return new ModelAndView("redirect:" + signatureUrl);
+
+    }
