@@ -6,9 +6,8 @@ import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.ForkJoinWorkerThread;
 
 /**
- * 专用的线程池,防止影响其他业务
+ * 涓撶敤鐨勭嚎绋嬫睜,闃叉褰卞搷鍏朵粬涓氬姟
  *
- * @author liuhaoi
  */
 public class CommonUpesnForkJoinPool {
 
