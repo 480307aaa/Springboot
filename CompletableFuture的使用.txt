@@ -1,0 +1,119 @@
+  /**
+     * 获取商品详情(权益中心改版）
+     *
+     * @param productId 商品Id
+     * @return
+     */
+    @RequestMapping(value = "v2/prod", method = RequestMethod.GET)
+    public CommonResponse getProdDetail(@RequestParam(value = "productId", required = false) String productId,
+                                        @RequestParam(value = "deviceCode", required = false) String qrUrl) throws Exception {
+        if (!StringHelper.isNum(productId)) {
+            throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "商品信息ID错误");
+        }
+
+        String accessToken = getJDAccessToken();
+
+        CompletableFuture<YesOrNotType> priceAdjustmentFuture = CompletableFuture
+                .supplyAsync(() -> {
+
+                    ProductDTO productDTO = productQryService.getProd(Long.parseLong(productId), false);
+                    ProductPO productPO;
+                    if (productDTO == null) {
+                        throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "不存在此类商品");
+                    }
+
+                    if (productDTO.getProperty() == ProductProperty.THIRD) {
+                        //京东物流商品
+                        if (productDTO.getSubProperty() == ProductSubProperty.JINGDONG_PRODS) {
+                            //获取京东accessToken
+
+                            ProductSkuPO productSkuPO = productSkuDao.getByProductId(Long.parseLong(productId));
+                            JDOrderReqDTO jdOrderReqDTO = new JDOrderReqDTO();
+                            JDOrderReqDTO.SKUInfo skuInfo = jdOrderReqDTO.new SKUInfo();
+                            //skuInfo的sku字段如何获得
+                            skuInfo.setSku(productSkuPO.getOuterCode());
+
+                            jdOrderReqDTO.setSkuId(productSkuPO.getId());
+                            jdOrderReqDTO.setSkuList(Lists.newArrayList(skuInfo));
+
+                            JDPriceDTO jdPriceDTO = null;
+                            try {
+                                jdPriceDTO = JDAPIUtils.getSkuPrice(accessToken, jdOrderReqDTO.getSkuList().get(0).getSku());
+                            } catch (Exception e) {
+                                log.error("消息推送失败", e);
+                            }
+
+                            //jdPriceDTO如果为null，则说明该商品不在商品池子中
+
+                            int discount = sysConfigService.getSysConfigInt(ConfigConstant.JD_SKU_DISCOUNT);
+
+                            Integer cost = productSkuPO.getCost();
+                            Integer salePrice = productSkuPO.getSalePrice();
+                            if (jdPriceDTO != null) {
+                                cost = ComputeUtil.toScaleLong(jdPriceDTO.getPrice()).intValue();
+                                salePrice = ComputeUtil.toScaleLong(jdPriceDTO.getJdPrice()).intValue();
+                                productSkuPO.setCost(cost);
+                                productSkuPO.setSalePrice(salePrice);
+                                productSkuPO.setId(jdOrderReqDTO.getSkuId());
+                                productSkuDao.updateByNotNullFiled(productSkuPO);
+                            }
+
+                            int jdDiscount = salePrice * 100 / cost;
+                            ProductSkuPO skuPO = productSkuDao.getById(jdOrderReqDTO.getSkuId());
+                            productPO = productDao.getById(skuPO.getProductId());
+                            if (jdDiscount <= discount) {
+                                productService.saleOffProdByCodes(Lists.newArrayList(productPO.getCode()), null);
+                                return YesOrNotType.NOT;
+                            } else {
+                                productService.onSaleProduct(Lists.newArrayList(productPO.getCode()));
+                                return YesOrNotType.YES;
+                            }
+                        }
+                    }
+                    return YesOrNotType.YES;
+                }, initExecutorService);
+
+        Long memberId = ThreadInfoHolder.getCurrentMemberId();
+        if (memberId == null) {
+            throw new BusinessException(ErrorType.MEMBER_NOT_EXIST, "查不到该人员的信息，请确认参数");
+        }
+
+        CompletableFuture<EcProductVO> productVODetailFuture = CompletableFuture.supplyAsync(() -> {
+
+            GoodVO goodVO = gooodAppService.getProductAndSkuList(Long.valueOf(productId), qrUrl, memberId);
+            //展示详情
+            EcProductVO productVO = new EcProductVO();
+            if (goodVO != null) {
+                productVO.setProdId(goodVO.getGoodCateDetailId());
+                productVO.setPicture(goodVO.getPicture());
+                productVO.setProdName(goodVO.getProductName());
+                if (goodVO.getIsLimitStock() == YesOrNotType.YES.code()) {
+                    productVO.setLeftStock(goodVO.getTotalStock());
+                } else {
+                    productVO.setLeftStock(999);
+                }
+
+                productVO.setLimitBuyCount(goodVO.getLimitBuyCount());
+                productVO.setProviderMemo(goodVO.getProviderMemo());
+                productVO.setCanPurchase(goodVO.getCanPurchase());
+                productVO.setCanNotPurchaseMsg(goodVO.getCanNotPurchaseMsg());
+                productVO.setShareMsg(goodVO.getShareMsg());
+                productVO.setProperty(goodVO.getProperty());
+                if (PubTools.isNotEmptyList(goodVO.getNote())) {
+                    String productMemo = String.join("\n", goodVO.getNote());
+                    productVO.setProductMemo(productMemo);
+                }
+            }
+            return productVO;
+        }, initExecutorService);
+
+        CompletableFuture.allOf(priceAdjustmentFuture, productVODetailFuture).join();
+
+        YesOrNotType onSale = priceAdjustmentFuture.get();
+        EcProductVO productVO = productVODetailFuture.get();
+        if (onSale.code() == 0) {
+            productVO.setCanPurchase(YesOrNotType.NOT.code());
+            productVO.setCanNotPurchaseMsg("商品已经下架啦~");
+        }
+        return ResponseBuilder.buildSuccessResponse(productVO);
+    }
