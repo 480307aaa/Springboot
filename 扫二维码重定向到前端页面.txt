@@ -1,6 +1,0 @@
-
-    @RequestMapping(value = "r/doubao")
-    public void hitDoubao(String id, HttpServletResponse response) throws IOException {
-        // TODO 暂时只支持友空间扫码
-        response.sendRedirect("/h5/modules/hitGoldBean/index.html?app=upesn&sendType=1&hongbaoId=" + id);
-    }

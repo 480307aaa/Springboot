@@ -1,0 +1,107 @@
+
+    @RequestMapping(value = "r/doubao")
+    public void hitDoubao(String id, HttpServletResponse response) throws IOException {
+        // TODO 暂时只支持友空间扫码
+        response.sendRedirect("/h5/modules/hitGoldBean/index.html?app=upesn&sendType=1&hongbaoId=" + id);
+    }
+    
+    
+    
+        /**
+     * @param companyId  公司id
+     * @param actType    活动类型
+     * @param activityId 活动id
+     * @param skuId      商品库存id
+     * @param price      物品价格
+     * @return 扫码购商品
+     * 扫码买商品
+     */
+    @RequestMapping(value = "/product/{companyId}/{actType}/{activityId}/{skuId}/{price}")
+    public void sendHonourScanCode(
+            @PathVariable("companyId") Long companyId,
+            @PathVariable("actType") String actType,
+            @PathVariable("activityId") String activityId,
+            @PathVariable("skuId") String skuId,
+            @PathVariable("price") Integer price,
+            @RequestParam(value = "usercode", required = false) String usercode,
+            HttpServletResponse response) throws IOException {
+
+        MemberDTO memberDTO = authService.login(usercode);
+        if (memberDTO == null) {
+            throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "友空间认证code为空");
+        }
+
+        Integer actualPrice = price * 100;
+
+        Boolean enough = verifyJindouEnough(memberDTO.getId(), actualPrice);
+        OrderDTO result;
+
+        if (!enough) {
+
+            throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "账户金豆金额不足");
+
+        } else {
+
+            if (StringUtils.isBlank(actType)) {
+
+                throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "活动类型必传");
+
+            }
+            ActFromType actFromType = ActFromType.class.getEnumConstants()[Integer.valueOf(actType) - 1];
+            ActSignRelatDTO actSignRelatDTO = actSignService
+                    .getActSignRelation(companyId, actFromType, activityId);
+
+            if (null == actSignRelatDTO) {
+                throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "活动还未开放");
+            }
+        }
+
+        ProductSkuDTO skuDTO = productQryService.getSku(Long.parseLong(skuId));
+
+        if (skuDTO == null) {
+            throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "规格不存在, 请联系管理员！");
+        }
+        ProductDTO productDTO = productQryService.getProd(skuDTO.getProductId(), false);
+        if (productDTO == null) {
+            throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "商品不存在, 请联系管理员！");
+        }
+
+        OrderRequestDTO orderRequestDTO = new OrderRequestDTO();
+
+        orderRequestDTO.setCompanyId(companyId);
+        orderRequestDTO.setCount(1);
+        orderRequestDTO.setFloatSalePrice(actualPrice);
+        orderRequestDTO.setJdPrice(actualPrice.toString());
+        orderRequestDTO.setOwnerId(memberDTO.getId());
+        orderRequestDTO.setOwnerType(OwnerType.MEMBER);
+        orderRequestDTO.setProductSkuId(Long.parseLong(skuId));
+
+        result = orderService.createOrder(orderRequestDTO);
+
+        String successMsg = "恭喜您，成功领取【" + productDTO.getProductName() + "】一份";
+        String redirect = String.format(UrlConstant.PUB_SUCCESS_REDIRECT, URLEncoder.encode(successMsg, "utf-8"));
+
+        dealWithResonse(usercode, response, ResponseBuilder.buildSuccessResponse(result), redirect);
+    }
+
+    private Boolean verifyJindouEnough(Long cdmMemberId, Integer actualPrice) {
+
+        MemberAccount memberAccount = accountService.findMemberUsableSelfAccount(cdmMemberId);
+        log.error("memberAccount is : " + memberAccount);
+
+        return (memberAccount == null ? 0 : memberAccount.getUsableSelfAmount()) >= actualPrice;
+    }
+    
+    
+    
+  //其中需要的处理方法
+    private void dealWithResonse(String usercode, HttpServletResponse response, CommonResponse commonResponse, String redirect) throws IOException {
+        // 友空间扫码
+        if (StringUtils.isNotEmpty(usercode)) {
+            response.sendRedirect(redirect);
+        } else {
+            String jsonString = JSONObject.toJSONString(commonResponse);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().print(jsonString);
+        }
+    }
