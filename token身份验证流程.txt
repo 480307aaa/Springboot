@@ -1,0 +1,154 @@
+
+token的设计
+需要思考几个问题，分别是token何时产生，token的基本构成和token的加解密。
+
+token何时生成
+
+将系统的登录入口作为token产生的关键点。用户登录一般会采用用户名/密码，手机号/验证码的方式来登录，这个一般能够确认用户身份的合法性。
+
+token的构成
+
+一般包含用户身份信息，有效期，生产日期。
+
+token的加解密
+
+采用AES非对称加密token，这里token的加解密只会在服务端进行，在私钥不被泄露的情况下破解token的难度还是非常大的。
+
+token的验证
+
+首先验证token的合法性，如何token解析有问题直接判断非法。通过私钥对token进行解密，将产生时间戳和有效期相加与当前时间戳对比，比当前时间大则判定合法。
+这个过程，一般我们通过☆过滤器☆来对调用api的request进行检查，所以我们需要定义好哪些api路径或方法需要被执行token的有效期验证。
+具体的拦截器如何定义，可以参考github上的备忘录：拦截器如何定义以及拦截器和自定义注解的结合使用
+
+token的传递
+
+在客户端请求api服务时，将token添加到http请求头中作为authration进行传递。
+
+-------------------------------------------------------------------------------------------------------------
+
+第一步：生成包含个人信息的token，比如服务之间的调用，必须考虑调用者的身份，客户端按照一定的规则生成代表调用者身份的字符串，服务器端拿到这个串，从中可以解析到调用者的身份
+   
+声明方法：
+
+   /**
+     * 根据空间和成员ID 获取Token
+     *
+     * @param qzId       空间ID
+     * @param memberId   成员ID
+     * @param app        应用, 唯一标示即可,没有业务含义,应用隔离会使用,如upesnlive-new,todo-center都有效
+     * @param attributes 拓展字段
+     * @return Token
+     */
+    AccessTokenBO generateToken(String qzId, String memberId, String app, Map<String, String> attributes);
+	
+	
+具体的实现：
+
+    @NotNull
+    private AccessTokenBO generateNewToken(String qzId, String memberId, String tenantId, String yhtUserId, String app,
+                                           Role role, Long expirationAt, Map<String, String> attributes) {
+
+        AccessTokenBO token = new AccessTokenBO();
+
+        token.setQzId(qzId);
+        token.setMemberId(memberId);
+        token.setTenantId(tenantId);
+        token.setYhtUserId(yhtUserId);
+        token.setAttributes(attributes);
+        token.setApp(app);
+        token.setRole(role);
+        token.setCtime(System.currentTimeMillis());
+        if (expirationAt != null) {
+            token.setExpiration(expirationAt);
+        } else {
+            token.setExpiration(System.currentTimeMillis() + getTokenExpireMilliSecond());
+        }
+
+        //根据一定的策略生成token,生成的token里面包含着qzId/memberId等信息
+        token.setToken(tokenBuildPolicy.generateToken(token));
+
+        //AccessToken数据持久化：为什么需要给token做持久化，试想如果存储token的服务器宕机后，用户信息也会伴随着失效，用户需要重新登陆来获取token，难免降低了用户体验，
+		//所以我们需要像处理session分布式一样，将token持久化。
+        accessTokenDBProvider.save(token);
+		
+		//token放在缓存中
+        tokenCache.putKV(token.getToken(), token);
+
+        return token;
+    }
+
+这里使用到的token生成策略：TokenBuildPolicy
+
+public interface TokenBuildPolicy {
+
+    /**
+     * 生成Token字符串
+     *
+     * @param token token对象
+     * @return token token
+     */
+    String generateToken(AccessTokenBO token);
+}
+token生成策略具体实现：利用加密算法生成token
+
+常用的两种加密手段：AES加密和RSA加密（当然也对应这两种解析token的方式和两种生成token的方式），不加密的话随机生成字符串
+
+AES加密策略：
+@RequiredArgsConstructor
+public class AESTokenBuildPolicy implements TokenBuildPolicy {
+
+    private final AccessTokenCipher accessTokenCipher;
+
+    @Override
+    public String generateToken(AccessTokenBO token) {
+        String s = accessTokenCipher.buildToken(token);
+        token.setToken(s);
+        return s;
+    }
+
+}
+
+随机码生成token的策略，token的生成是随机生成的一个32位16进制数
+
+public class RandomTokenBuildPolicy implements TokenBuildPolicy {
+
+    @Override
+    public String generateToken(AccessTokenBO token) {
+        String s = UUID.randomUUID().toString();
+        token.setToken(s);
+        return s;
+    }
+
+}
+
+AccessTokenCipher主要包含buildToken（生成token）和decry(解析token)两类方法
+
+--------------------------------------------------------------------------------------------
+第二步：根据token获取用户信息
+
+    @Override
+    public InAPIUser getUserByAccessToken(String accessToken) {
+
+        InAPIRequest sign = inAPIRequestSignature.sign(CERTIFIED_ACCESS_TOKEN + accessToken);
+
+        ResponseEntity<UserResponse> entity = restTemplate.getRestTemplate()
+                .getForEntity(sign.buildURLWithAllParam(), UserResponse.class);
+
+        try {
+            responseChecker.check(entity, sign);
+        } catch (ECRemoteServiceException e) {
+            String message = e.getMessage();
+            if (message != null && message.contains("无数据")) {
+                throw new ECUnauthorizedException(message, e);
+            }
+        }
+
+        return new InAPIUser(entity.getBody().getData());
+    }
+
+
+			
+
+
+
+
