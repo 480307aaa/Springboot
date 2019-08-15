@@ -1,0 +1,421 @@
+第一步：生成包含个人信息的code，比如服务之间的调用，必须考虑调用者的身份，客户端按照一定的规则生成代表调用者身份的字符串，服务器端拿到这个串，从中可以解析到调用者的身份
+   
+声明方法：
+   /**
+     * 获取一次性验证Code
+     *
+     * @param qzId     空间ID
+     * @param memberId 成员ID
+     * @return 应用Code
+     */
+    @Retryable(value = {ConnectException.class, HttpServerErrorException.class}, maxAttempts = 1)
+    String requestAppCode(String qzId, String memberId);
+具体的实现：
+
+    @Override
+    public String requestAppCode(String qzId, String memberId) {
+	    //构造参数
+        Map<String, String> params = new HashMap<>(2);
+        params.put("qz_id", qzId);
+        params.put("member_id", memberId);
+        
+		//对生成code的请求url进行数字签名
+        InAPIRequest sign = inAPIRequestSignature.sign("/app/getCode", params);
+
+        //调用生成code的具体服务
+        ResponseEntity<HashMapResponse> entity = restTemplate.getRestTemplate()
+                .getForEntity(sign.buildURLWithAllParam(), HashMapResponse.class);
+
+        验证接口返回
+        responseChecker.check(entity, sign);
+        //从中获取需要的code
+        return entity.getBody().getData().get("code");
+    }
+
+第二步：当我们访问具体的接口时，需要带着这个code信息，那服务端又是如何根据这个code解析出个人信息的呢?
+
+声明方法：从code中获取个人信息
+
+    /**
+     * 根据一次性Code获取用户信息
+     *
+     * @param appCode 一次性Code
+     * @return 用户信息
+     */
+    @Retryable(value = {ConnectException.class, HttpServerErrorException.class}, maxAttempts = 1)
+    InAPIUser getUserByCode(String appCode);
+	
+具体的实现：
+
+    @Override
+    @RecordTime(errorThresholdMs = 5000)
+    public InAPIUser getUserByCode(String appCode) {
+	
+	    
+        //url签名
+        InAPIRequest sign = inAPIRequestSignature.sign("/certified/userInfo/" + appCode);
+
+        //调用相应的解析code的服务
+        ResponseEntity<UserResponse> entity = restTemplate.getRestTemplate()
+                .getForEntity(sign.getUrl(), UserResponse.class);
+        //返回值检查
+        responseChecker.check(entity, sign);
+        个人信息
+        return new InAPIUser(entity.getBody().getData());
+    }
+
+小结：这里的ResponseEntity<T>：
+1）如果接口返回的是单个实体类的信息，则<>泛型内填写具体的类类型
+2）接口返回String,类型，则具体的class字节码类为String.class
+3)接口返回类型是void，则class字节码类为Void.class
+4)接口返回类型为一个List<xxx>,形式，则新建一个responsexxx类，去集成ArrayList<XXX>
+
+比如：
+
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class UserResponse extends InAPIResponse<InAPIUser.InAPIUserResponseTO> {
+
+}
+
+则ResponseEntity接收返回值可以这样写：
+ResponseEntity<UserResponse> entity = restTemplate.getRestTemplate()
+                .getForEntity(sign.getUrl(), UserResponse.class);
+
+其中的InAPIUser与InAPIUserResponseTO的关系是这样设计的(静态内部类的使用)：我们在最后可以通过 return new InAPIUser(entity.getBody().getData()) 拿到InAPIUser的信息
+
+
+
+package com.yonyoucloud.ec.sns.starter.inapi.module.pojo;
+
+
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.Date;
+
+/**
+ * @author liuhaoi
+ */
+@Data
+@NoArgsConstructor
+public class InAPIUser {
+
+    private String id;
+
+    /**
+     * 圈子ID
+     **/
+    private Integer instanceId;
+
+    // 空间ID
+    private Integer qzId;
+
+
+    private String tenantId;
+
+
+    private String yhtUserId;
+
+
+    private String memberId;
+
+    private String uid;
+
+
+    private String mpInstanceId;
+
+    private String name;
+
+
+    private String nickName;
+
+    /**
+     * 头像
+     **/
+    private String avatar;
+
+    private Integer isDefaultAvatar;
+
+    private String workPhotos;
+
+    private String company;
+
+    /**
+     * 职位
+     */
+    private String duty;
+
+
+    private Integer deptId;
+
+
+    private String deptName;
+
+    private String describes;
+
+    private String mobile;
+
+    private String email;
+
+    /**
+     * 生日
+     */
+    private String birthday;
+
+    /**
+     * 0 男 1女 2 未知 "保密"
+     */
+    private String sex;
+
+
+    private Boolean isAdmin;
+
+    /**
+     * 工号
+     */
+    private String staffNo;
+
+    private Integer orgId;
+
+    private String orgName;
+
+    private String workEmail;
+
+    /**
+     * 入职日期
+     */
+    private Date employedDate;
+
+
+    private Integer fansCount;
+
+
+    private Integer speechCount;
+
+
+    private Integer followCount;
+
+    private String categoryId;
+
+    private String workAddress;
+
+    /**
+     * 是否离职 1：离职，0未离职
+     */
+    private Integer isResign;
+
+    /**
+     * 人员类别名称
+     */
+    private String categoryName;
+
+    public String getName() {
+
+        if (name == null) {
+            return null;
+        }
+
+        //小尾巴逻辑, 如果名称中含有-,则会出现问题
+        int index = name.indexOf('-');
+        //以-开始不处理
+        if (index > 0) {
+            name = name.substring(0, index);
+        }
+        return name;
+    }
+
+    public InAPIUser(InAPIUserResponseTO userResponseTO) {
+
+        id = userResponseTO.getId();
+        instanceId = userResponseTO.getInstance_id();
+        qzId = userResponseTO.getQz_id();
+        tenantId = userResponseTO.getTenant_id();
+        yhtUserId = userResponseTO.getYht_userid();
+
+        memberId = userResponseTO.getMember_id();
+        if (StringUtils.isBlank(memberId)) {
+            memberId = id;
+        }
+
+        uid = userResponseTO.getUid();
+        mpInstanceId = userResponseTO.getMp_instance_id();
+        name = userResponseTO.getName();
+        nickName = userResponseTO.getNick_name();
+        avatar = userResponseTO.getAvatar();
+        isDefaultAvatar = userResponseTO.getIsDefaultAvatar();
+        workPhotos = userResponseTO.getWorkPhotos();
+        company = userResponseTO.getCompany();
+        duty = userResponseTO.getDuty();
+        deptId = userResponseTO.getDept_id();
+        deptName = StringUtils.isBlank(userResponseTO.getDept_name())?
+                userResponseTO.getDeptName():userResponseTO.getDept_name();
+        describes = userResponseTO.getDescribes();
+        mobile = userResponseTO.getMobile();
+        email = userResponseTO.getEmail();
+        birthday = userResponseTO.getBirthday();
+        sex = userResponseTO.getSex();
+        isAdmin = userResponseTO.getIs_admin();
+        staffNo = userResponseTO.getStaff_no();
+        orgId = userResponseTO.getOrgId();
+        orgName = userResponseTO.getOrgName();
+        workEmail = userResponseTO.getWork_email();
+        employedDate = userResponseTO.getEmployedDate();
+        fansCount = userResponseTO.getFans_cnt();
+        speechCount = userResponseTO.getSpeech_cnt();
+        followCount = userResponseTO.getFollow_cnt();
+        categoryId = userResponseTO.getPsnl_catg_id();
+        categoryName = userResponseTO.getPsnl_catg_name();
+        workAddress = userResponseTO.getWorkaddress();
+        isResign = userResponseTO.getIs_resign();
+    }
+
+    public Boolean getSpaceAdmin() {
+        return isAdmin;
+    }
+
+    public String getQzIdStr() {
+
+        if (qzId != null) {
+            return String.valueOf(qzId);
+        }
+
+        return null;
+    }
+
+    public Long getLongQzId() {
+
+        if (qzId != null) {
+            return qzId.longValue();
+        }
+
+        return null;
+    }
+
+    public Long getLongMemberId() {
+
+        if (StringUtils.isNotEmpty(memberId)) {
+            return Long.parseLong(memberId);
+        }
+
+        return null;
+    }
+
+    public String getStringDeptId() {
+
+        if (deptId != null) {
+            return deptId.toString();
+        }
+
+        return null;
+    }
+
+
+    @Data
+    @NoArgsConstructor
+    public static class InAPIUserResponseTO {
+
+        private String id;
+
+        /**
+         * 圈子ID
+         **/
+
+        private Integer instance_id;
+
+        // 空间ID
+
+        private Integer qz_id;
+
+
+        private String tenant_id;
+
+
+        private String yht_userid;
+
+
+        private String member_id;
+
+        private String uid;
+
+
+        private String mp_instance_id;
+
+        private String name;
+
+
+        private String nick_name;
+
+        private String avatar; // 头像
+
+        private Integer isDefaultAvatar;
+
+        private String workPhotos;
+
+        private String company;
+
+        private String duty; // 职位
+
+
+        private Integer dept_id;
+
+        private String dept_name;
+
+        private String deptName;
+
+        private String describes;
+
+        private String mobile;
+
+        private String work_mobile;
+
+        private String email;
+
+        private String birthday; // 生日
+
+        private String sex; // 0 男 1女 2 未知 "保密"
+
+
+        private Boolean is_admin;
+
+
+        private String staff_no; // 工号
+
+        private Integer orgId;
+
+        private String orgName;
+
+        private String workaddress;
+
+        private String work_email;
+
+        private Date employedDate; // 入职日期
+
+
+        private Integer fans_cnt;
+
+
+        private Integer speech_cnt;
+
+
+        private Integer follow_cnt;
+
+        private String psnl_catg_name;
+
+        private String psnl_catg_id;
+
+        private Integer is_resign;
+
+        public InAPIUser buildUser() {
+            return new InAPIUser(this);
+        }
+
+    }
+}
+
+			
+
+
+
+
