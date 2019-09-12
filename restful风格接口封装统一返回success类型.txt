@@ -1,0 +1,70 @@
+public class MeetingController {
+
+    private <T> JSONObject buildReturn(int code, T data, String msg) {
+
+        JSONObject res = new JSONObject();
+        res.put("code", code);
+        res.put("data", data);
+        res.put("msg", msg);
+        return res;
+    }
+
+    ;
+
+    public <T> JSONObject success(T data) {
+
+        return buildReturn(0, data, "success");
+    }
+
+    ;
+
+    public <T> JSONObject success(T data, String msg) {
+
+        return buildReturn(0, data, msg);
+    }
+
+    ;
+
+    public <T> JSONObject successEmptyList(String msg) {
+
+        return buildReturn(0, Collections.EMPTY_LIST, msg);
+    }
+
+    ;
+
+    public <T> JSONObject successEmptyObj(String msg) {
+
+        return buildReturn(0, null, msg);
+    }
+
+    ;
+
+    public <T> JSONObject fail(T data) {
+
+        return buildReturn(1, data, "fail");
+    }
+
+    ;
+
+    public <T> JSONObject fail(T data, String msg) {
+
+        return buildReturn(1, data, msg);
+    }
+
+    ;
+
+    public <T> JSONObject failEmptyList(String msg) {
+
+        return buildReturn(1, Collections.EMPTY_LIST, msg);
+    }
+
+    ;
+
+    public <T> JSONObject failEmptyObj(String msg) {
+
+        return buildReturn(1, null, msg);
+    }
+
+    ;
+
+}
