@@ -145,9 +145,9 @@ public class ExcelUtil {
         HSSFComment comment = patriarch.createComment(new HSSFClientAnchor(0,
                 0, 0, 0, (short) 4, 2, (short) 6, 5));
         // 设置注释内容
-        comment.setString(new HSSFRichTextString("刘晓勇?！"));
+        comment.setString(new HSSFRichTextString("会议签到"));
         // 设置注释作者，当鼠标移动到单元格上是可以在状态栏中看到该内容.
-        comment.setAuthor("braveliu");
+        comment.setAuthor("yaoshw@yonyou.com");
         // 产生表格标题行
         HSSFRow row = sheet.createRow(0);
         for (int i = 0; i < headers.length; i++) {
@@ -173,12 +173,12 @@ public class ExcelUtil {
                     String textValue = null;
                     if (value instanceof Boolean) {
                         boolean bValue = (Boolean) value;
-                        textValue = "男";
+                        textValue = "已签到";
                         if (!bValue) {
-                            textValue = "女";
+                            textValue = "未签到";
                         }
-                    } else if (value instanceof Date) {
-                        Date date = (Date) value;
+                    } else if (value instanceof Long) {
+                        Date date = new Date((Long) value);
                         SimpleDateFormat sdf = new SimpleDateFormat(
                                 "yyyy-MM-dd HH:mm:ss");
                         textValue = sdf.format(date);
