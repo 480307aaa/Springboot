@@ -5,13 +5,13 @@
                                            HttpServletResponse response) throws IOException {
 
         if (Objects.isNull(companyId)) {
-            throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "Ã»ÓĞÊäÈëÆóÒµid");
+            throw new BusinessException(ErrorType.SYS_VALIDATE_ERROR, "æ²¡æœ‰è¾“å…¥ä¼ä¸šid");
         }
 
         List<CompanyMemberHonourStatisticDTO> honourResult = honourAppService.getStatisticHonourByCompanyId(companyId, beginTime, endTime);
-        String[] headers = {"id", "ĞÕÃû", "ÓÊÏä", "ÊÖ»ú", "ÈÙÒ«ÊıÁ¿"};
+        String[] headers = {"id", "å§“å", "é‚®ç®±", "æ‰‹æœº", "è£è€€æ•°é‡"};
 
-        //½«²éÑ¯µ½µÄÊı¾İ×ª³ÉlistĞÎÊ½´æ´¢
+        //å°†æŸ¥è¯¢åˆ°çš„æ•°æ®è½¬æˆlistå½¢å¼å­˜å‚¨
         List<Object[]> res = honourResult.stream().map(honourItem -> new Object[]{honourItem.getOwnerId(), honourItem.getUserName(),
                 honourItem.getEmail(), honourItem.getMobile(), honourItem.getCount()}).collect(Collectors.toList());
 
@@ -20,39 +20,71 @@
 
         ExcelUtil.generateResponseForMultiSheet(response, headers, resMap, "honour.xls");
     }
+}
+
+//å…·ä½“çš„exportæ–¹æ³•
+package com.yonyoucloud.ec.sns.confidential.meeting.support;
+
+import lombok.Cleanup;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.hssf.usermodel.*;
+import org.apache.poi.hssf.util.HSSFColor;
+import org.apache.poi.ss.usermodel.*;
+
+import javax.servlet.http.HttpServletResponse;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static java.util.regex.Pattern.compile;
 
 
-//¾ßÌåµÄµ¼³ö·½·¨
+/**
+ * æ•°æ®å¯¼å‡º
+ *
+ * @author yaoshw
+ */
+@Slf4j
+public class ExcelUtil {
 
-public static void generateResponseForMultiSheet(HttpServletResponse response, String[] headArray,
+    public static void generateResponseForMultiSheet(HttpServletResponse response, String[] headArray,
                                                      Map<String, List<Object[]>> contentListMap, String fileName) throws IOException {
-        // ¶Áµ½Á÷ÖĞ
+        // è¯»åˆ°æµä¸­
         @Cleanup InputStream inStream = exportExcel(headArray, contentListMap);
-        // ÉèÖÃÊä³öµÄ¸ñÊ½
+        // è®¾ç½®è¾“å‡ºçš„æ ¼å¼
         response.reset();
-        response.setContentType("bin");
+        response.setContentType("text/html; charset=utf-8");
         response.addHeader("Content-Disposition", "attachment; filename=\""
                 + fileName + "\"");
-        // Ñ­»·È¡³öÁ÷ÖĞµÄÊı¾İ
+        // å¾ªç¯å–å‡ºæµä¸­çš„æ•°æ®
         byte[] b = new byte[100];
         int len;
         try {
-            while ((len = inStream.read(b)) > 0)
+            while ((len = Objects.requireNonNull(inStream).read(b)) > 0) {
                 response.getOutputStream().write(b, 0, len);
+            }
         } catch (IOException e) {
             log.error("error is : {} ", e);
         }
     }
-// POI²Ù×÷ Export excle
+// POIæ“ä½œ Export excle
 
- public static InputStream exportExcel(String[] headers, Map<String, List<Object[]>> dataset) throws IOException {
+    public static InputStream exportExcel(String[] headers, Map<String, List<Object[]>> dataset) throws IOException {
 
         if (Objects.isNull(dataset)) {
 
             return null;
         }
 
-        // ÉùÃ÷Ò»¸ö¹¤×÷±¡
+        // å£°æ˜ä¸€ä¸ªå·¥ä½œè–„
         HSSFWorkbook workbook = new HSSFWorkbook();
         @Cleanup ByteArrayOutputStream os = new ByteArrayOutputStream();
         for (String key : dataset.keySet()) {
@@ -66,56 +98,57 @@ public static void generateResponseForMultiSheet(HttpServletResponse response, S
         @Cleanup InputStream is = new ByteArrayInputStream(os.toByteArray());
         return is;
     }
-//exportInner·½·¨
+//exportInneræ–¹æ³•
 
     private static HSSFWorkbook exportInner(HSSFWorkbook workbook, String title,
                                             String[] headers, List<Object[]> dataset,
                                             ByteArrayOutputStream os) {
 
-        // Éú³ÉÒ»¸ö±í¸ñ
+        // ç”Ÿæˆä¸€ä¸ªè¡¨æ ¼
         HSSFSheet sheet = workbook.createSheet(title);
-        // Éú³ÉÒ»¸öÑùÊ½
+        // ç”Ÿæˆä¸€ä¸ªæ ·å¼
         HSSFCellStyle style = workbook.createCellStyle();
-        // ÉèÖÃÕâĞ©ÑùÊ½
-        style.setFillForegroundColor(HSSFColor.SKY_BLUE.index);
-        style.setFillPattern(HSSFCellStyle.SOLID_FOREGROUND);
-        style.setBorderBottom(HSSFCellStyle.BORDER_THIN);
-        style.setBorderLeft(HSSFCellStyle.BORDER_THIN);
-        style.setBorderRight(HSSFCellStyle.BORDER_THIN);
-        style.setBorderTop(HSSFCellStyle.BORDER_THIN);
-        style.setAlignment(HSSFCellStyle.ALIGN_CENTER);
-        // Éú³ÉÒ»¸ö×ÖÌå
+        // è®¾ç½®è¿™äº›æ ·å¼
+        style.setFillForegroundColor(HSSFColor.HSSFColorPredefined.SKY_BLUE.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setAlignment(HorizontalAlignment.GENERAL);
+        // ç”Ÿæˆä¸€ä¸ªå­—ä½“
         HSSFFont font = workbook.createFont();
-        font.setColor(HSSFColor.VIOLET.index);
+        font.setColor(HSSFColor.HSSFColorPredefined.VIOLET.getIndex());
+
         font.setFontHeightInPoints((short) 12);
-        font.setBoldweight(HSSFFont.BOLDWEIGHT_BOLD);
-        // °Ñ×ÖÌåÓ¦ÓÃµ½µ±Ç°µÄÑùÊ½
+        font.setBold(true);
+        // æŠŠå­—ä½“åº”ç”¨åˆ°å½“å‰çš„æ ·å¼
         style.setFont(font);
-        // Éú³É²¢ÉèÖÃÁíÒ»¸öÑùÊ½
+        // ç”Ÿæˆå¹¶è®¾ç½®å¦ä¸€ä¸ªæ ·å¼
         HSSFCellStyle style2 = workbook.createCellStyle();
-        style2.setFillForegroundColor(HSSFColor.LIGHT_YELLOW.index);
-        style2.setFillPattern(HSSFCellStyle.SOLID_FOREGROUND);
-        style2.setBorderBottom(HSSFCellStyle.BORDER_THIN);
-        style2.setBorderLeft(HSSFCellStyle.BORDER_THIN);
-        style2.setBorderRight(HSSFCellStyle.BORDER_THIN);
-        style2.setBorderTop(HSSFCellStyle.BORDER_THIN);
-        style2.setAlignment(HSSFCellStyle.ALIGN_CENTER);
-        style2.setVerticalAlignment(HSSFCellStyle.VERTICAL_CENTER);
-        // Éú³ÉÁíÒ»¸ö×ÖÌå
+        style2.setFillForegroundColor(HSSFColor.HSSFColorPredefined.LIGHT_YELLOW.getIndex());
+        style2.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style2.setBorderBottom(BorderStyle.THIN);
+        style2.setBorderLeft(BorderStyle.THIN);
+        style2.setBorderRight(BorderStyle.THIN);
+        style2.setBorderTop(BorderStyle.THIN);
+        style2.setAlignment(HorizontalAlignment.GENERAL);
+        style2.setVerticalAlignment(VerticalAlignment.CENTER);
+        // ç”Ÿæˆå¦ä¸€ä¸ªå­—ä½“
         HSSFFont font2 = workbook.createFont();
-        font2.setBoldweight(HSSFFont.BOLDWEIGHT_NORMAL);
-        // °Ñ×ÖÌåÓ¦ÓÃµ½µ±Ç°µÄÑùÊ½
+        font2.setBold(true);
+        // æŠŠå­—ä½“åº”ç”¨åˆ°å½“å‰çš„æ ·å¼
         style2.setFont(font2);
-        // ÉùÃ÷Ò»¸ö»­Í¼µÄ¶¥¼¶¹ÜÀíÆ÷
+        // å£°æ˜ä¸€ä¸ªç”»å›¾çš„é¡¶çº§ç®¡ç†å™¨
         HSSFPatriarch patriarch = sheet.createDrawingPatriarch();
-        // ¶¨Òå×¢ÊÍµÄ´óĞ¡ºÍÎ»ÖÃ,Ïê¼ûÎÄµµ
+        // å®šä¹‰æ³¨é‡Šçš„å¤§å°å’Œä½ç½®,è¯¦è§æ–‡æ¡£
         HSSFComment comment = patriarch.createComment(new HSSFClientAnchor(0,
                 0, 0, 0, (short) 4, 2, (short) 6, 5));
-        // ÉèÖÃ×¢ÊÍÄÚÈİ
-        comment.setString(new HSSFRichTextString("ÁõÏşÓÂ?£¡"));
-        // ÉèÖÃ×¢ÊÍ×÷Õß£¬µ±Êó±êÒÆ¶¯µ½µ¥Ôª¸ñÉÏÊÇ¿ÉÒÔÔÚ×´Ì¬À¸ÖĞ¿´µ½¸ÃÄÚÈİ.
+        // è®¾ç½®æ³¨é‡Šå†…å®¹
+        comment.setString(new HSSFRichTextString("åˆ˜æ™“å‹‡?ï¼"));
+        // è®¾ç½®æ³¨é‡Šä½œè€…ï¼Œå½“é¼ æ ‡ç§»åŠ¨åˆ°å•å…ƒæ ¼ä¸Šæ˜¯å¯ä»¥åœ¨çŠ¶æ€æ ä¸­çœ‹åˆ°è¯¥å†…å®¹.
         comment.setAuthor("braveliu");
-        // ²úÉú±í¸ñ±êÌâĞĞ
+        // äº§ç”Ÿè¡¨æ ¼æ ‡é¢˜è¡Œ
         HSSFRow row = sheet.createRow(0);
         for (int i = 0; i < headers.length; i++) {
             HSSFCell cell = row.createCell(i);
@@ -123,7 +156,7 @@ public static void generateResponseForMultiSheet(HttpServletResponse response, S
             HSSFRichTextString text = new HSSFRichTextString(headers[i]);
             cell.setCellValue(text);
         }
-        // ±éÀú¼¯ºÏÊı¾İ£¬²úÉúÊı¾İĞĞ
+        // éå†é›†åˆæ•°æ®ï¼Œäº§ç”Ÿæ•°æ®è¡Œ
         int index = 0;
         for (Object[] o : dataset) {
             index++;
@@ -136,13 +169,13 @@ public static void generateResponseForMultiSheet(HttpServletResponse response, S
                     if (value == null) {
                         value = "";
                     }
-                    // ÅĞ¶ÏÖµµÄÀàĞÍºó½øĞĞÇ¿ÖÆÀàĞÍ×ª»»
+                    // åˆ¤æ–­å€¼çš„ç±»å‹åè¿›è¡Œå¼ºåˆ¶ç±»å‹è½¬æ¢
                     String textValue = null;
                     if (value instanceof Boolean) {
                         boolean bValue = (Boolean) value;
-                        textValue = "ÄĞ";
+                        textValue = "ç”·";
                         if (!bValue) {
-                            textValue = "Å®";
+                            textValue = "å¥³";
                         }
                     } else if (value instanceof Date) {
                         Date date = (Date) value;
@@ -150,33 +183,33 @@ public static void generateResponseForMultiSheet(HttpServletResponse response, S
                                 "yyyy-MM-dd HH:mm:ss");
                         textValue = sdf.format(date);
                     } else if (value instanceof byte[]) {
-                        // ÓĞÍ¼Æ¬Ê±£¬ÉèÖÃĞĞ¸ßÎª60px;
+                        // æœ‰å›¾ç‰‡æ—¶ï¼Œè®¾ç½®è¡Œé«˜ä¸º60px;
                         row.setHeightInPoints(60);
-                        // ÉèÖÃÍ¼Æ¬ËùÔÚÁĞ¿í¶ÈÎª80px,×¢ÒâÕâÀïµ¥Î»µÄÒ»¸ö»»Ëã
+                        // è®¾ç½®å›¾ç‰‡æ‰€åœ¨åˆ—å®½åº¦ä¸º80px,æ³¨æ„è¿™é‡Œå•ä½çš„ä¸€ä¸ªæ¢ç®—
                         sheet.setColumnWidth(i, (short) (35.7 * 80));
                         // sheet.autoSizeColumn(i);
                         byte[] bsValue = (byte[]) value;
                         HSSFClientAnchor anchor = new HSSFClientAnchor(0, 0,
                                 1023, 255, (short) 7, index, (short) 7, index);
-                        anchor.setAnchorType(2);
+                        anchor.setAnchorType(ClientAnchor.AnchorType.MOVE_DONT_RESIZE);
                         patriarch.createPicture(anchor, workbook.addPicture(
                                 bsValue, HSSFWorkbook.PICTURE_TYPE_JPEG));
                     } else {
-                        // ÆäËüÊı¾İÀàĞÍ¶¼µ±×÷×Ö·û´®¼òµ¥´¦Àí
+                        // å…¶å®ƒæ•°æ®ç±»å‹éƒ½å½“ä½œå­—ç¬¦ä¸²ç®€å•å¤„ç†
                         textValue = value.toString();
                     }
-                    // Èç¹û²»ÊÇÍ¼Æ¬Êı¾İ£¬¾ÍÀûÓÃÕıÔò±í´ïÊ½ÅĞ¶ÏtextValueÊÇ·ñÈ«²¿ÓÉÊı×Ö×é³É
+                    // å¦‚æœä¸æ˜¯å›¾ç‰‡æ•°æ®ï¼Œå°±åˆ©ç”¨æ­£åˆ™è¡¨è¾¾å¼åˆ¤æ–­textValueæ˜¯å¦å…¨éƒ¨ç”±æ•°å­—ç»„æˆ
                     if (textValue != null) {
-                        Pattern p = Pattern.compile("^//d+(//.//d+)?$");
+                        Pattern p = compile("^//d+(//.//d+)?$");
                         Matcher matcher = p.matcher(textValue);
                         if (matcher.matches()) {
-                            // ÊÇÊı×Öµ±×÷double´¦Àí
+                            // æ˜¯æ•°å­—å½“ä½œdoubleå¤„ç†
                             cell.setCellValue(Double.parseDouble(textValue));
                         } else {
                             HSSFRichTextString richString = new HSSFRichTextString(
                                     textValue);
                             HSSFFont font3 = workbook.createFont();
-                            font3.setColor(HSSFColor.BLUE.index);
+                            font3.setColor(HSSFColor.HSSFColorPredefined.BLUE.getIndex());
                             richString.applyFont(font3);
                             cell.setCellValue(richString);
                         }
@@ -188,3 +221,4 @@ public static void generateResponseForMultiSheet(HttpServletResponse response, S
         }
         return workbook;
     }
+}
