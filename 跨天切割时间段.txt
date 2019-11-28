@@ -1,0 +1,46 @@
+
+
+    public List<MeetingTimeBO> getSubTime(String qzId, String deptId, Long start, Long end) {
+        if (null == start || null == end) {
+            throw new ECIllegalArgumentException("start or end time should not be null");
+        }
+        if (end <= start) {
+            throw new ECIllegalArgumentException("end should be greater than start");
+        }
+        DateTime startDt = new DateTime(start);
+        DateTime endDt = new DateTime(end);
+        int startDayOfYear = startDt.getDayOfYear();
+        int endDayOfYear = endDt.getDayOfYear();
+        MeetingTimeBO meetingSubTimeBO = new MeetingTimeBO();
+        //当天直接返回
+        if (startDayOfYear == endDayOfYear) {
+            meetingSubTimeBO.setStartTime(start);
+            meetingSubTimeBO.setEndTime(end);
+            return Lists.newArrayList(meetingSubTimeBO);
+        }
+        //隔天拆分返回
+        int startMillisOfDay = startDt.getMillisOfDay();
+        int endMillisOfDay = endDt.getMillisOfDay();
+
+        //连续
+        return generateSubTimes(startDt, startDayOfYear, endDayOfYear, startMillisOfDay, endMillisOfDay);
+
+    }
+	
+	
+	 private List<MeetingTimeBO> generateSubTimes(DateTime startDt,
+                                                 int startDayOfYear, int endDayOfYear,
+                                                 int startMillisOfDay, int endMillisOfDay) {
+        List<MeetingTimeBO> resultMeeting = Lists.newArrayList();
+        for (; startDayOfYear <= endDayOfYear; startDayOfYear++) {
+            DateTime dt = startDt.withDayOfYear(startDayOfYear).withMillisOfDay(startMillisOfDay);
+            MeetingTimeBO bo = new MeetingTimeBO();
+            bo.setStartTime(dt.getMillis());
+            dt = startDt.withDayOfYear(startDayOfYear).withMillisOfDay(endMillisOfDay);
+            bo.setEndTime(dt.getMillis());
+            resultMeeting.add(bo);
+        }
+
+        return resultMeeting;
+
+    }
