@@ -1,0 +1,19 @@
+boot:
+    admin:
+      client:
+        url: http://spring-boot-admin.lightapp-system:8080
+        username: ${spring.security.user.name}
+        password: ${spring.security.user.password}
+        instance:
+          prefer-ip: true
+          metadata:
+            user.name: ${spring.security.user.name}
+            user.password: ${spring.security.user.password}
+            tags:
+              environment: ${spring.profiles.active}
+        register-once: true
+        auto-registration: true
+        auto-deregistration: true
+        api-path: altas/instances
+        connect-timeout: PT1S
+        read-timeout: PT5S
