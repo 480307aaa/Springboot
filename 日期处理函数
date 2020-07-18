@@ -1,0 +1,148 @@
+package com.ruoyi.project.knowledge.controller;
+
+
+import com.ruoyi.framework.web.domain.AjaxResult;
+import com.ruoyi.project.knowledge.domain.KnowledgeBase;
+import com.ruoyi.project.knowledge.service.IKnowledgeBaseService;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.text.SimpleDateFormat;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.util.*;
+
+/**
+ * @author yaosw6
+ * @since 2020.7.17
+ */
+
+@RestController
+@RequestMapping("/knowledge/statistics")
+@Api(value = "知识库报表展示", description = "知识库报表展示")
+public class knowledgeStatisticsController {
+
+
+    @Autowired
+    private IKnowledgeBaseService knowledgeBaseService;
+
+    @RequestMapping(value = "/list", method = RequestMethod.GET)
+    @ApiOperation("工作台报表数据展示")
+    public AjaxResult list() {
+
+        //定义一个map,作为该接口的返回数据
+        Map<String, Object> result = new HashMap<>(16);
+        return AjaxResult.success(buildKnowledgeStatistic(result));
+    }
+
+    private Map<String, Object> buildKnowledgeStatistic(Map<String, Object> result) {
+        //方案总数
+        Long schemeTotalCount = 0L;
+        //今天上传数量
+        Long uploadCountToday = 0L;
+        //本周上传数量
+        Long uploadThisWeek = 0L;
+        //本月上传数量
+        Long uploadThisMonth = 0L;
+
+        List<KnowledgeBase> knowledgeBaseList = knowledgeBaseService.selectKnowledgeBaseList(null);
+        if (knowledgeBaseList == null || knowledgeBaseList.size() == 0) {
+            return null;
+        }
+        result.put("知识库总数", knowledgeBaseList.size());
+
+        //计算当天上传数量
+
+        result.put("今天上传数量", buildUploadCountToday(uploadCountToday, knowledgeBaseList));
+
+        //计算本月上传数量
+
+        result.put("本周上传数量", builduploadThisWeek(uploadThisWeek, knowledgeBaseList));
+
+        //计算本月上传数量
+
+        result.put("本月上传数量", buildUploadThisMonth(uploadThisMonth, knowledgeBaseList));
+        return result;
+
+    }
+
+    private Long buildUploadThisMonth(Long uploadThisMonth, List<KnowledgeBase> knowledgeBaseList) {
+
+        Calendar calendar = Calendar.getInstance();// 获取当前日期
+        calendarSetTime(calendar);
+        calendar.set(Calendar.DAY_OF_MONTH, 1);// 设置为1号,当前日期既为本月第一天
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        long startTime = calendar.getTimeInMillis();
+
+        calendar.clear();
+        calendarSetTime(calendar);
+        calendar.set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH));// 获取当前月最后一天
+        calendar.set(Calendar.HOUR_OF_DAY, 23);
+        calendar.set(Calendar.MINUTE, 59);
+        calendar.set(Calendar.SECOND, 59);
+        calendar.set(Calendar.MILLISECOND, 999);
+        long endTime = calendar.getTimeInMillis();
+
+        return knowledgeBaseList.stream().filter(knowledgeBase -> knowledgeBase.getCreateTime().getTime() >= startTime
+                && knowledgeBase.getCreateTime().getTime() <= endTime
+        ).count();
+
+    }
+
+    private void calendarSetTime(Calendar calendar) {
+        calendar.setTimeZone(TimeZone.getTimeZone("GMT+8:00"));
+        calendar.setTimeInMillis(System.currentTimeMillis());
+        calendar.add(Calendar.YEAR, 0);
+        calendar.add(Calendar.MONTH, 0);
+    }
+
+    private Long builduploadThisWeek(Long uploadThisWeek, List<KnowledgeBase> knowledgeBaseList) {
+
+        // 当周开始时间
+        Calendar currentDate = Calendar.getInstance();
+        currentDate.setFirstDayOfWeek(Calendar.MONDAY);
+        currentDate.set(Calendar.HOUR_OF_DAY, 0);
+        currentDate.set(Calendar.MINUTE, 0);
+        currentDate.set(Calendar.SECOND, 0);
+        currentDate.set(Calendar.DAY_OF_WEEK, Calendar.MONDAY);
+
+        String pattern = "yyyy-MM-dd HH:mm:ss";
+
+        SimpleDateFormat format = new SimpleDateFormat(pattern);
+
+        long start = currentDate.getTimeInMillis();
+        long end;
+
+        // 当周结束时间
+
+        end=start+24*60*60*7*1000;
+
+
+        return knowledgeBaseList.stream().filter(knowledgeBase -> knowledgeBase.getCreateTime().getTime() >= start
+                && knowledgeBase.getCreateTime().getTime() <= end).count();
+    }
+
+    private Long buildUploadCountToday(Long uploadCountToday, List<KnowledgeBase> knowledgeBaseList) {
+
+        long current = System.currentTimeMillis();    //当前时间毫秒数
+        long zeroT = current / (1000 * 3600 * 24) * (1000 * 3600 * 24) - TimeZone.getDefault().getRawOffset();  //今天零点零分零秒的毫秒数
+        String zero = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(zeroT);
+        long endT = zeroT + 24 * 60 * 60 * 1000 - 1;  //今天23点59分59秒的毫秒数
+        String end = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(endT);
+
+        for (KnowledgeBase knowledgeBase : knowledgeBaseList) {
+
+            if (knowledgeBase.getCreateTime().getTime() >= zeroT && knowledgeBase.getCreateTime().getTime() <= endT) {
+                uploadCountToday++;
+            }
+        }
+        return uploadCountToday;
+    }
+}
