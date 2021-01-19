@@ -1,0 +1,58 @@
+ public void doTask() {
+
+
+        String postResult = HttpUtil
+                .createGet("http://58.247.45.77:53460/tlData?cmd=SHM")
+                .charset("gbk")
+                .execute()
+                .body();
+
+        //字符串 转 JSONObject
+        JSONObject json = new JSONObject(postResult);
+        //拿到了data数据
+        String dataStr = json.getStr("strain");
+        if (!dataStr.equals("")) {
+            //当有数据时怎么处理
+            //去拿第一个点的值即可
+            JSONArray jsonArray = new JSONArray(dataStr);
+            //多层数据
+            if (jsonArray.size() > 0) {
+                //统一插入
+                List<HccSteelEssdatamonitor> hccSteelEssdatamonitorList = new ArrayList<>();
+
+                for (int i = 0; i < jsonArray.size(); i++) {
+                    JSONObject iniiObject = jsonArray.getJSONObject(i);
+                    //拿到是哪个站点的数据
+                    String pointNo = iniiObject.getStr("pointNo");
+                    //去拿每一个data的数据
+                    JSONArray dataReal = iniiObject.getJSONArray("data");
+                    //只要第一个
+
+                    if (dataReal.size() >= 1) {
+                        JSONObject firstObject = (JSONObject) dataReal.get(0);
+
+                        String frequency = firstObject.get("frequency").toString();
+                        String resistance = firstObject.get("resistance").toString();
+                        String datetimeStr = firstObject.get("datetime").toString();
+                        long dateTime = Long.parseLong(datetimeStr) * 1000;
+
+                        //保存温度
+                        String temp = generateTempData(resistance);
+
+                        //应力值
+                        String ess = gegerateEssData(frequency);
+
+                        HccSteelEssdatamonitor hccSteelEssdatamonitor = new HccSteelEssdatamonitor();
+                        hccSteelEssdatamonitor.setResistance(temp);
+                        hccSteelEssdatamonitor.setUpdateTime(new Date(dateTime));
+                        hccSteelEssdatamonitor.setPointNo(pointNo);
+                        hccSteelEssdatamonitor.setFrequency(ess);
+                        hccSteelEssdatamonitorList.add(hccSteelEssdatamonitor);
+                    }
+                    //获取里面的每一个数据
+                }
+                hccSteelEssdatamonitorService.insertBatch(hccSteelEssdatamonitorList);
+            }
+        }
+
+    }
