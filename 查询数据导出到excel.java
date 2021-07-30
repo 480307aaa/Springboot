@@ -61,7 +61,7 @@ public class ExcelUtil {
         @Cleanup InputStream inStream = exportExcel(headArray, contentListMap);
         // 设置输出的格式
         response.reset();
-        response.setContentType("text/html; charset=utf-8");
+         response.setContentType("application/vnd.ms-excel;charset=utf-8");
         response.addHeader("Content-Disposition", "attachment; filename=\""
                 + fileName + "\"");
         // 循环取出流中的数据
