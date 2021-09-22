@@ -1,0 +1,63 @@
+    public static List<CityCodeVo> getCountryByAdCode(String provinceAdCode, String cityCode) {
+
+        String url = "https://restapi.amap.com/v3/config/district?keywords=" + provinceAdCode + "&subdistrict=2&key=" + MAP_KEY;
+
+        AsyncHttpClientConfig.Builder builder = new AsyncHttpClientConfig.Builder();
+
+        builder.setCompressionEnforced(true);
+        builder.setAllowPoolingConnections(true);
+
+        builder.setRequestTimeout((int) TimeUnit.MINUTES.toMillis(1));
+
+        builder.setPooledConnectionIdleTimeout((int) TimeUnit.MINUTES.toMillis(1));
+
+        AsyncHttpClient client = new AsyncHttpClient(builder.build());
+
+
+        List<CityCodeVo> countyList = new LinkedList<>();
+
+        try {
+
+            ListenableFuture<Response> future = client.prepareGet(url).execute();
+
+            String result = future.get().getResponseBody();
+
+            System.out.println(result);
+
+            JsonNode jsonNode = new com.fasterxml.jackson.databind.ObjectMapper().readTree(future.get().getResponseBody());
+
+
+            //存储找到的第二层districts，也就是一个市下县的信息
+            JsonNode midResult = null;
+
+            if (jsonNode.findValue("status").textValue().equals("1")) {
+
+                JsonNode listSource = jsonNode.findValue("districts");
+                JsonNode midSource = listSource.findValue("districts");
+                for (int i = 0; i < midSource.size(); i++) {
+                    if (midSource.get(i).findValue("citycode").textValue().equals(cityCode)) {
+                        midResult = midSource.get(i);
+                    }
+                }
+            }
+            //分析第三层districts
+            JsonNode threeLevelJsonNode = midResult.findValue("districts");
+            for (int i = 0; i < threeLevelJsonNode.size(); i++) {
+
+                CityCodeVo cityCodeVo=new CityCodeVo();
+                cityCodeVo.setName(threeLevelJsonNode.get(i).findValue("name").textValue());
+                cityCodeVo.setCode(threeLevelJsonNode.get(i).findValue("adcode").textValue());
+                countyList.add(cityCodeVo);
+            }
+
+        } catch (Exception e) {
+
+            e.printStackTrace();
+
+        } finally {
+
+            client.close();
+
+        }
+        return countyList;
+    }
